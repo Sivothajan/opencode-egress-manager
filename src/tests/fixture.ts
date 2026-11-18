@@ -8,7 +8,7 @@ export function makeState(overrides: Partial<AppState> = {}): AppState {
       isWin10OrNewer: true,
       isAdmin: false,
       machineName: "TEST-PC",
-      appVersion: "3.0.0",
+      appVersion: "0.1.0",
     },
     warp: {
       installed: true,
