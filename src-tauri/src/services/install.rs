@@ -72,13 +72,14 @@ fn read_user_path() -> Option<(String, REG_VALUE_TYPE)> {
         if read != WIN32_ERROR(0) {
             return None;
         }
-        let text = String::from_utf16_lossy(
-            &buf[..size as usize]
-                .chunks_exact(2)
-                .map(|c| u16::from_ne_bytes([c[0], c[1]]))
-                .take_while(|c| *c != 0)
-                .collect::<Vec<_>>(),
-        );
+        let units: Vec<u16> = buf[..size as usize]
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|pair| u16::from_ne_bytes(*pair))
+            .take_while(|unit| *unit != 0)
+            .collect();
+        let text = String::from_utf16_lossy(&units);
         Some((text, kind))
     }
 }
