@@ -50,4 +50,4 @@ See [docs/RELEASE.md](docs/RELEASE.md) for signing inputs and the release workfl
 
 ## License
 
-MIT.
+[MIT](LICENSE).
