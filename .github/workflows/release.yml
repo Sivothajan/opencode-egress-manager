@@ -13,6 +13,10 @@ on:
         description: "Branch, tag, or commit to build"
         required: false
         default: main
+      prerelease:
+        description: "Mark the GitHub Release as a pre-release"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -112,7 +116,7 @@ jobs:
             ```powershell
             Get-FileHash .\<installer> -Algorithm SHA256
             ```
-          prerelease: ${{ inputs.release_version == '' }}
+          prerelease: ${{ inputs.prerelease }}
           draft: ${{ inputs.release_version == '' }}
           fail_on_unmatched_files: true
           files: |
