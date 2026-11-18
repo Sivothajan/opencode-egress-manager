@@ -61,6 +61,10 @@ jobs:
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
 
+      - name: Stage externalBin placeholder
+        shell: pwsh
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/stage-admin-sidecar.ps1
+
       - name: rustfmt check
         run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 

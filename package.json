@@ -17,7 +17,8 @@
     "format": "prettier --write . && cargo fmt --manifest-path src-tauri/Cargo.toml",
     "format:check": "prettier --check . && cargo fmt --manifest-path src-tauri/Cargo.toml -- --check",
     "format:web": "prettier --write .",
-    "format:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml"
+    "format:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml",
+    "setup": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/stage-admin-sidecar.ps1"
   },
   "prettier": {
     "semi": true,

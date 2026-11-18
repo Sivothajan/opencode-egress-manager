@@ -40,6 +40,10 @@ function Sign-File {
     Write-Host "Signed $Path" -ForegroundColor Green
 }
 
+# Tauri validates externalBin paths while its build script runs, which happens before the
+# admin helper can be compiled. Stage a placeholder first, then overwrite it with the real PE.
+& (Join-Path $PSScriptRoot "stage-admin-sidecar.ps1")
+
 Write-Host "== Building privileged helper ==" -ForegroundColor Cyan
 Push-Location $Tauri
 try {
@@ -50,9 +54,13 @@ try {
 
 $AdminSource = Join-Path $Tauri "target\release\egress-manager-admin.exe"
 if (-not (Test-Path $AdminSource)) { throw "admin helper was not built: $AdminSource" }
-$BinDir = Join-Path $Tauri "binaries"
-New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
-Copy-Item $AdminSource (Join-Path $BinDir "egress-manager-admin-$TargetTriple.exe") -Force
+& (Join-Path $PSScriptRoot "stage-admin-sidecar.ps1") -Source $AdminSource
+
+$Staged = Join-Path $Tauri "binaries\egress-manager-admin-$TargetTriple.exe"
+$Header = [IO.File]::ReadAllBytes($Staged)[0..1]
+if ($Header[0] -ne 0x4D -or $Header[1] -ne 0x5A) {
+    throw "staged admin sidecar is not a PE executable: $Staged"
+}
 
 Write-Host "== Building application ==" -ForegroundColor Cyan
 & bun run tauri build

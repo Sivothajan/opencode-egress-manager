@@ -17,11 +17,16 @@ Stack: Tauri 2, React, TypeScript, Rust. No Python runtime is bundled.
 
 ```bash
 bun install
+bun run setup        # clean checkout only: stages the admin helper path for cargo
 bun run tauri dev
 bun run typecheck
 bun run test
 bun run format:check
 ```
+
+On a clean clone, run `bun run setup` before any cargo command. Tauri validates its
+externalBin resource while its build script runs, before that binary can exist. CI and
+`bun run build:release` do this automatically.
 
 ## Build
 

@@ -19,6 +19,10 @@ cargo test --lib --manifest-path src-tauri/Cargo.toml
 
 Lockfiles `bun.lock` and `src-tauri/Cargo.lock` are committed.
 
+The admin helper is a Tauri `externalBin`, so its target file must exist when the build
+script runs. `scripts/stage-admin-sidecar.ps1` creates a placeholder on a clean checkout and
+`build-release.ps1` overwrites it with the real PE and verifies the header before bundling.
+
 ## Version
 
 Keep three files in sync: `package.json`, `src-tauri/tauri.conf.json`,
