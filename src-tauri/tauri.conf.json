@@ -1,7 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Opencode Egress Manager",
-  "version": "3.0.0",
   "identifier": "com.opencode.egress-manager",
   "build": {
     "beforeDevCommand": "bun run dev",

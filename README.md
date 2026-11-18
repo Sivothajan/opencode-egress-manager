@@ -53,6 +53,13 @@ docs/          architecture, security, release notes
 
 See [docs/RELEASE.md](docs/RELEASE.md) for signing inputs and the release workflow.
 
+## Credits
+
+Original idea and Python/PyWebView implementation:
+[ShadowySphinX/Opencode-Unlimited-Limit-Bypass-](https://github.com/ShadowySphinX/Opencode-Unlimited-Limit-Bypass-).
+This project reuses its routing concepts and egress behavior in a Windows-first Tauri/Rust
+rewrite.
+
 ## License
 
 [MIT](LICENSE).

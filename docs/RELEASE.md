@@ -25,8 +25,9 @@ script runs. `scripts/stage-admin-sidecar.ps1` creates a placeholder on a clean 
 
 ## Version
 
-Keep three files in sync: `package.json`, `src-tauri/tauri.conf.json`,
-`src-tauri/Cargo.toml`.
+`src-tauri/Cargo.toml` is the single source of truth. Tauri derives its bundle version
+from `CARGO_PKG_VERSION`, and the UI reports the same value at runtime. Do not add
+duplicate version fields elsewhere.
 
 ## Signing
 
