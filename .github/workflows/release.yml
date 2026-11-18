@@ -77,9 +77,14 @@ jobs:
         id: artifacts
         shell: pwsh
         run: |
-          $installer = Get-ChildItem "src-tauri\target\release\bundle\nsis\*_setup.exe" |
+          $nsisDir = Join-Path $env:GITHUB_WORKSPACE "src-tauri\target\release\bundle\nsis"
+          $installer = Get-ChildItem -LiteralPath $nsisDir -Filter "*.exe" |
             Sort-Object LastWriteTime -Descending | Select-Object -First 1
-          if (-not $installer) { throw "Installer was not produced" }
+          if (-not $installer) {
+            Get-ChildItem -Recurse (Join-Path $env:GITHUB_WORKSPACE "src-tauri\target\release\bundle") |
+              Select-Object -ExpandProperty FullName
+            throw "Installer was not produced"
+          }
           New-Item -ItemType Directory -Force -Path "release-artifacts" | Out-Null
           Copy-Item $installer.FullName "release-artifacts\$($installer.Name)"
           Copy-Item "src-tauri\target\release\opencode-egress-manager.exe" "release-artifacts\" -ErrorAction SilentlyContinue
