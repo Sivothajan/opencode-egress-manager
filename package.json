@@ -1,0 +1,81 @@
+{
+  "name": "opencode-egress-manager",
+  "private": true,
+  "version": "3.0.0",
+  "type": "module",
+  "packageManager": "bun@1.4.4",
+  "description": "Windows-first egress manager for OpenCode (Tauri 2 + React + Rust)",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "build:release": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-release.ps1",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write . && cargo fmt --manifest-path src-tauri/Cargo.toml",
+    "format:check": "prettier --check . && cargo fmt --manifest-path src-tauri/Cargo.toml -- --check",
+    "format:web": "prettier --write .",
+    "format:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml"
+  },
+  "prettier": {
+    "semi": true,
+    "singleQuote": false,
+    "quoteProps": "as-needed",
+    "trailingComma": "all",
+    "printWidth": 100,
+    "tabWidth": 2,
+    "useTabs": false,
+    "endOfLine": "lf",
+    "bracketSpacing": true,
+    "arrowParens": "always",
+    "plugins": [
+      "prettier-plugin-toml"
+    ],
+    "overrides": [
+      {
+        "files": "*.toml",
+        "options": {
+          "parser": "toml"
+        }
+      }
+    ]
+  },
+  "dependencies": {
+    "@base-ui/react": "1.9.0",
+    "@fontsource-variable/geist": "^5.3.0",
+    "@tanstack/react-query": "5.108.0",
+    "@tauri-apps/api": "2.12.5",
+    "class-variance-authority": "^0.7.1",
+    "cn": "^0.5.2",
+    "lucide-react": "1.75.0",
+    "next-themes": "0.4.6",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "react-router-dom": "7.18.5",
+    "shadcn": "^4.23.0",
+    "tw-animate-css": "^1.4.0",
+    "zod": "4.6.7",
+    "zustand": "5.1.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.5",
+    "@tauri-apps/cli": "2.12.5",
+    "@testing-library/dom": "10.4.1",
+    "@testing-library/jest-dom": "6.9.1",
+    "@testing-library/react": "16.3.3",
+    "@testing-library/user-event": "14.6.12",
+    "@types/node": "24.10.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.3.0",
+    "jsdom": "31.0.1",
+    "prettier": "3.10.1",
+    "prettier-plugin-toml": "4.1.0",
+    "tailwindcss": "4.3.5",
+    "typescript": "5.9.3",
+    "vite": "8.3.8",
+    "vitest": "5.1.1"
+  }
+}

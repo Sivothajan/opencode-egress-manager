@@ -1,0 +1,114 @@
+name: Release
+
+# Manual-only release pipeline. CI never publishes builds; this workflow is
+# triggered explicitly from the Actions tab and creates the installer + GitHub Release.
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: "Version tag to publish (e.g. v3.0.1). Leave blank for an unsigned draft build."
+        required: false
+        default: ""
+      git_ref:
+        description: "Branch, tag, or commit to build"
+        required: false
+        default: main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.run_number }}
+  cancel-in-progress: false
+
+jobs:
+  build-release:
+    name: Build Windows release
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ inputs.git_ref }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version-file: package.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Prepare signing certificate
+        id: cert
+        shell: pwsh
+        env:
+          CERT_BASE64: ${{ secrets.OUC_CERT_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.OUC_CERT_PASSWORD }}
+          SIGN_THUMBPRINT: ${{ secrets.OUC_SIGN_THUMBPRINT }}
+        run: |
+          $hasPfx = -not [string]::IsNullOrWhiteSpace($env:CERT_BASE64)
+          $hasThumb = -not [string]::IsNullOrWhiteSpace($env:SIGN_THUMBPRINT)
+          if ($hasPfx) {
+            [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\ouc-cert.pfx", [Convert]::FromBase64String($env:CERT_BASE64))
+            "pfx=$env:RUNNER_TEMP\ouc-cert.pfx" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            "password-set=$(-not [string]::IsNullOrWhiteSpace($env:CERT_PASSWORD))" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          } elseif ($hasThumb) {
+            "thumbprint=$env:SIGN_THUMBPRINT" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          } else {
+            "No signing certificate configured; building unsigned." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          }
+
+      - name: Build installer (release)
+        shell: pwsh
+        env:
+          OUC_SIGN_PFX: ${{ steps.cert.outputs.pfx }}
+          OUC_SIGN_PASSWORD: ${{ secrets.OUC_CERT_PASSWORD }}
+          OUC_SIGN_THUMBPRINT: ${{ steps.cert.outputs.thumbprint }}
+        run: bun run build:release
+
+      - name: Collect artifacts
+        id: artifacts
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem "src-tauri\target\release\bundle\nsis\*_setup.exe" |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $installer) { throw "Installer was not produced" }
+          New-Item -ItemType Directory -Force -Path "release-artifacts" | Out-Null
+          Copy-Item $installer.FullName "release-artifacts\$($installer.Name)"
+          Copy-Item "src-tauri\target\release\opencode-egress-manager.exe" "release-artifacts\" -ErrorAction SilentlyContinue
+          Copy-Item "SHA256SUMS.txt" "release-artifacts\"
+          "installer=$($installer.Name)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: release-${{ github.run_number }}
+          path: release-artifacts/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3.0.4
+        with:
+          tag_name: ${{ inputs.release_version != '' && inputs.release_version || format('manual-build-{0}', github.run_number) }}
+          name: ${{ inputs.release_version != '' && inputs.release_version || format('Manual build {0}', github.run_number) }}
+          body: |
+            Windows release built by the manual release workflow.
+
+            Verify the installer against `SHA256SUMS.txt` before distributing:
+
+            ```powershell
+            Get-FileHash .\<installer> -Algorithm SHA256
+            ```
+          prerelease: ${{ inputs.release_version == '' }}
+          draft: ${{ inputs.release_version == '' }}
+          fail_on_unmatched_files: true
+          files: |
+            release-artifacts/*
