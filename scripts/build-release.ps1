@@ -74,9 +74,24 @@ if ($Installer) { Sign-File -Path $Installer.FullName }
 Write-Host "== Checksums ==" -ForegroundColor Cyan
 $BundleRoot = Join-Path $Tauri "target\release\bundle"
 $ChecksumFile = Join-Path $Root "SHA256SUMS.txt"
+function Get-Sha256Hex {
+    param([Parameter(Mandatory)][string]$Path)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $stream = [IO.File]::OpenRead($Path)
+        try {
+            return (($sha.ComputeHash($stream) | ForEach-Object { $_.ToString("x2") }) -join "")
+        } finally {
+            $stream.Dispose()
+        }
+    } finally {
+        $sha.Dispose()
+    }
+}
+
 $lines = @()
 Get-ChildItem $BundleRoot -Recurse -File -Include *.exe,*.msi | ForEach-Object {
-    $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+    $hash = Get-Sha256Hex -Path $_.FullName
     $relative = $_.FullName.Substring($Root.Length + 1)
     $lines += "$hash  $relative"
 }
