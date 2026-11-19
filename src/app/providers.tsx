@@ -1,17 +1,21 @@
+import { lazy } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "next-themes";
 import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { useBackendEvents } from "@/hooks/useAppState";
+import { useBackendEvents, useSystemAccent } from "@/hooks/useAppState";
 import AppShell from "./AppShell";
-import DashboardPage from "@/features/dashboard/DashboardPage";
-import NetworkPage from "@/features/networking/NetworkPage";
-import ProxyPage from "@/features/proxy/ProxyPage";
-import WarpPage from "@/features/warp/WarpPage";
-import TorPage from "@/features/tor/TorPage";
-import OpencodePage from "@/features/opencode/OpencodePage";
-import DiagnosticsPage from "@/features/diagnostics/DiagnosticsPage";
-import SettingsPage from "@/features/settings/SettingsPage";
+
+// Split each feature into its own chunk so the initial bundle only carries the
+// shell plus whichever route is open.
+const DashboardPage = lazy(() => import("@/features/dashboard/DashboardPage"));
+const NetworkPage = lazy(() => import("@/features/networking/NetworkPage"));
+const ProxyPage = lazy(() => import("@/features/proxy/ProxyPage"));
+const WarpPage = lazy(() => import("@/features/warp/WarpPage"));
+const TorPage = lazy(() => import("@/features/tor/TorPage"));
+const OpencodePage = lazy(() => import("@/features/opencode/OpencodePage"));
+const DiagnosticsPage = lazy(() => import("@/features/diagnostics/DiagnosticsPage"));
+const SettingsPage = lazy(() => import("@/features/settings/SettingsPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -21,6 +25,7 @@ const queryClient = new QueryClient({
 
 function EventBridge() {
   useBackendEvents();
+  useSystemAccent();
   return null;
 }
 

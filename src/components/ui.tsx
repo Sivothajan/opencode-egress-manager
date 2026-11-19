@@ -111,10 +111,10 @@ export function Badge({
 }) {
   const toneClass = {
     neutral: "bg-secondary text-secondary-foreground",
-    ok: "border-transparent bg-[var(--accent-soft)] text-[var(--ok)]",
-    warn: "border-transparent bg-[color-mix(in_srgb,var(--warn)_14%,transparent)] text-[var(--warn)]",
-    bad: "border-transparent bg-destructive/10 text-destructive",
-    info: "border-transparent bg-[color-mix(in_srgb,var(--info)_14%,transparent)] text-[var(--info)]",
+    ok: "border-transparent bg-[var(--ok-soft)] text-[var(--ok)]",
+    warn: "border-transparent bg-[var(--warn-soft)] text-[var(--warn)]",
+    bad: "border-transparent bg-[var(--danger-soft)] text-destructive",
+    info: "border-transparent bg-[var(--info-soft)] text-[var(--info)]",
   }[tone];
   return (
     <ShadcnBadge variant="outline" className={toneClass}>
@@ -194,16 +194,12 @@ export function LoadingState({ label = "Loading…" }: { label?: string }) {
 export function EmptyState({ title, detail }: { title: string; detail?: string }) {
   return (
     <div
-      className="flex h-40 flex-col items-center justify-center gap-1 rounded-lg border border-dashed"
-      style={{ borderColor: "var(--border)" }}
+      className="flex h-40 flex-col items-center justify-center gap-1 rounded-lg"
+      style={{ background: "var(--surface-2)" }}
     >
       <Info size={18} style={{ color: "var(--muted-text)" }} />
-      <p className="text-sm font-medium">{title}</p>
-      {detail && (
-        <p className="text-xs" style={{ color: "var(--muted-text)" }}>
-          {detail}
-        </p>
-      )}
+      <p className="text-sm font-medium text-foreground">{title}</p>
+      {detail && <p className="text-xs text-muted-foreground">{detail}</p>}
     </div>
   );
 }
@@ -221,15 +217,11 @@ export function ErrorState({
     <div
       role="alert"
       className="flex h-40 flex-col items-center justify-center gap-2 rounded-lg"
-      style={{ background: "var(--surface-2)" }}
+      style={{ background: "var(--danger-soft)" }}
     >
       <XCircle size={20} style={{ color: "var(--danger)" }} />
-      <p className="text-sm font-semibold">{title}</p>
-      {detail && (
-        <p className="max-w-md text-center text-xs" style={{ color: "var(--muted-text)" }}>
-          {detail}
-        </p>
-      )}
+      <p className="text-sm font-semibold text-foreground">{title}</p>
+      {detail && <p className="max-w-md text-center text-xs text-muted-foreground">{detail}</p>}
       {onRetry && (
         <Button size="sm" onClick={onRetry}>
           Retry

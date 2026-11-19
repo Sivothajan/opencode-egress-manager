@@ -13,6 +13,9 @@ import type {
 
 export const getPlatformInfo = () => cmd<PlatformInfo>("get_platform_info");
 
+/** Windows system accent color (`#RRGGBB`) or null when unavailable. */
+export const getSystemAccentColor = () => cmd<string | null>("get_system_accent_color");
+
 export interface NetworkInterfaceInfo {
   name: string;
   description: string;

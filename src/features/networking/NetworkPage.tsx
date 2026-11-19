@@ -72,7 +72,7 @@ export default function NetworkPage() {
 
       <PageContent query={stateQuery}>
         {(state) => (
-          <div className="space-y-4">
+          <div className="flex flex-col gap-4">
             <Card title="Egress verification">
               <div className="flex items-center gap-2">
                 <Globe size={18} style={{ color: "var(--accent)" }} />
@@ -83,7 +83,10 @@ export default function NetworkPage() {
                   </p>
                 </div>
               </div>
-              <div className="mt-3 space-y-1 text-xs" style={{ color: "var(--muted-text)" }}>
+              <div
+                className="mt-3 flex flex-col gap-1 text-xs"
+                style={{ color: "var(--muted-text)" }}
+              >
                 <Row label="Prefix" value={state.warp.egressPrefix || "—"} />
                 <Row label="Adapter IPv6" value={state.warp.adapterV6 || "missing"} />
                 <Row label="Cloudflare range" value={state.warp.isCloudflare ? "yes" : "no"} />
@@ -110,7 +113,7 @@ export default function NetworkPage() {
             </Card>
 
             <Card title="Route">
-              <div className="space-y-1 text-xs" style={{ color: "var(--muted-text)" }}>
+              <div className="flex flex-col gap-1 text-xs" style={{ color: "var(--muted-text)" }}>
                 <Row label="Mode" value={state.egress.mode} />
                 <Row label="WARP scope" value={state.egress.warpScope} />
                 <Row label="Custom node" value={state.egress.customCurrentNode || "—"} />

@@ -142,6 +142,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             crate::commands::ping,
             crate::commands::get_platform_info,
+            crate::commands::get_system_accent_color,
             crate::commands::get_interfaces,
             crate::commands::get_state,
             crate::commands::refresh_probe,
@@ -340,8 +341,6 @@ async fn run_repair_tick(
     state: &State<'_, AppState>,
     data: RepairSnapshotData,
 ) {
-    let now = Instant::now().elapsed().as_secs_f64();
-    let _ = now;
     let cooldowns: HashMap<&str, f64> = HashMap::from([
         ("start_keeper", 120.0),
         ("restart_keeper", 600.0),

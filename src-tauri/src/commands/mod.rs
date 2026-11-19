@@ -442,6 +442,11 @@ pub async fn get_platform_info() -> PlatformInfoDto {
 }
 
 #[tauri::command]
+pub async fn get_system_accent_color() -> Option<String> {
+    platform::system_accent_color()
+}
+
+#[tauri::command]
 pub async fn get_interfaces() -> Vec<networking::NetworkInterface> {
     tokio::task::spawn_blocking(networking::list_interfaces)
         .await

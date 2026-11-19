@@ -9,6 +9,7 @@ import { getState, hopNow } from "@/services/api";
 vi.mock("@/services/api", () => ({
   getState: vi.fn(),
   getInterfaces: vi.fn(),
+  getSystemAccentColor: vi.fn().mockResolvedValue(null),
   fixEverything: vi.fn().mockResolvedValue({ ok: true, message: "fixed" }),
   fixIssue: vi.fn().mockResolvedValue({ ok: true, message: "fixed" }),
   hopNow: vi.fn().mockResolvedValue({ ok: true, message: "Rotated /64" }),

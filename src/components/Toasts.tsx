@@ -10,9 +10,9 @@ export function Toasts() {
         <div
           key={toast.id}
           role="status"
-          className="pointer-events-auto flex items-start justify-between gap-2 rounded-lg border px-3 py-2 text-sm shadow-lg"
+          className="pointer-events-auto flex items-start justify-between gap-2 rounded-lg border px-3 py-2 text-sm text-foreground shadow-lg"
           style={{
-            background: "var(--surface)",
+            background: "var(--popover)",
             borderColor: "var(--border)",
           }}
         >
@@ -20,7 +20,7 @@ export function Toasts() {
           <button
             aria-label="Dismiss"
             onClick={() => dismiss(toast.id)}
-            style={{ color: "var(--muted)" }}
+            className="text-muted-foreground hover:text-foreground"
           >
             <X size={14} />
           </button>

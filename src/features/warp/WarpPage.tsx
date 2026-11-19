@@ -13,6 +13,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { PageContent } from "@/components/PageContent";
 import { useStateAction, useStateQuery } from "@/hooks/useAppState";
 import {
@@ -216,28 +224,24 @@ export default function WarpPage() {
             )}
             {ping.data ? (
               <div className="overflow-x-auto scroll-thin">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr style={{ color: "var(--muted-text)" }}>
-                      <th className="py-1 pr-3 font-medium">Endpoint</th>
-                      <th className="py-1 font-medium">Latency</th>
-                    </tr>
-                  </thead>
-                  <tbody className="mono">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Endpoint</TableHead>
+                      <TableHead>Latency</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {ping.data.map((item) => (
-                      <tr
-                        key={item.endpoint}
-                        className="border-t"
-                        style={{ borderColor: "var(--border)" }}
-                      >
-                        <td className="py-1.5 pr-3">{item.endpoint}</td>
-                        <td className="py-1.5">
+                      <TableRow key={item.endpoint}>
+                        <TableCell className="mono">{item.endpoint}</TableCell>
+                        <TableCell className="mono">
                           {item.latency === null ? "unreachable" : `${item.latency.toFixed(1)} ms`}
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
             ) : (
               <EmptyState

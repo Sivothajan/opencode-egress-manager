@@ -20,7 +20,7 @@ export default function OpencodePage() {
       {(state) => (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
           <Card title="Detected installations">
-            <div className="space-y-3">
+            <div className="flex flex-col gap-3">
               <div>
                 <p className="mb-1 flex items-center gap-2 text-[13px] font-medium">
                   <Terminal size={14} style={{ color: "var(--muted-text)" }} />

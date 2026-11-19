@@ -64,7 +64,7 @@ export default function DiagnosticsPage() {
               title="Checks"
               subtitle={`${checks.filter((c) => c.tone === "ok").length}/${checks.length} healthy`}
             >
-              <ul className="space-y-2">
+              <ul className="flex flex-col gap-2">
                 {checks.map((check) => (
                   <li key={check.label} className="flex items-start justify-between gap-3">
                     <div className="flex items-start gap-2">
@@ -121,7 +121,7 @@ export default function DiagnosticsPage() {
                   No repairs recorded.
                 </p>
               ) : (
-                <ul className="space-y-1.5 text-xs">
+                <ul className="flex flex-col gap-1.5 text-xs">
                   {state.autoRepair.actions
                     .slice()
                     .reverse()
@@ -151,7 +151,7 @@ export default function DiagnosticsPage() {
 
             <Card className="xl:col-span-3" title="Event logs">
               <Tabs value={logTab} onValueChange={setLogTab}>
-                <TabsList>
+                <TabsList variant="line">
                   {LOG_TABS.map((tab) => (
                     <TabsTrigger key={tab.id} value={tab.id}>
                       {tab.label}
@@ -256,7 +256,7 @@ function buildChecks(state: AppState): Array<{ label: string; detail: string; to
         : state.probe.ok === false
           ? `failed (${state.probe.code})`
           : "pending",
-    tone: state.probe.ok === true ? "ok" : state.probe.ok === false ? "warn" : "warn",
+    tone: state.probe.ok === true ? "ok" : "warn",
   });
   return checks;
 }

@@ -277,6 +277,71 @@ pub fn open_external_url(url: &str) -> Result<()> {
     }
 }
 
+/// Read the Windows system accent color.
+///
+/// `HKCU\Software\Microsoft\DWM\AccentColor` holds a COLORREF (`0x00BBGGRR`).
+/// Returns `#RRGGBB`, or `None` when the value is missing or unreadable.
+pub fn system_accent_color() -> Option<String> {
+    use windows::Win32::System::Registry::{
+        RegCloseKey, RegOpenKeyExW, RegQueryValueExW, HKEY, HKEY_CURRENT_USER, KEY_READ,
+        REG_SAM_FLAGS, REG_VALUE_TYPE,
+    };
+
+    const SUBKEY: &str = r"Software\Microsoft\DWM";
+    const VALUE: &str = "AccentColor";
+
+    unsafe {
+        let subkey = wide(SUBKEY);
+        let mut key: HKEY = HKEY(std::ptr::null_mut());
+        let status = RegOpenKeyExW(
+            HKEY_CURRENT_USER,
+            PCWSTR(subkey.as_ptr()),
+            Some(0),
+            REG_SAM_FLAGS(KEY_READ.0),
+            &mut key,
+        );
+        if status != WIN32_ERROR(0) {
+            return None;
+        }
+
+        let value_name = wide(VALUE);
+        let mut kind = REG_VALUE_TYPE::default();
+        let mut size: u32 = 0;
+        let query = RegQueryValueExW(
+            key,
+            PCWSTR(value_name.as_ptr()),
+            None,
+            Some(&mut kind),
+            None,
+            Some(&mut size),
+        );
+        if query != WIN32_ERROR(0) || size != 4 {
+            let _ = RegCloseKey(key);
+            return None;
+        }
+
+        let mut buf = [0u8; 4];
+        let read = RegQueryValueExW(
+            key,
+            PCWSTR(value_name.as_ptr()),
+            None,
+            Some(&mut kind),
+            Some(buf.as_mut_ptr()),
+            Some(&mut size),
+        );
+        let _ = RegCloseKey(key);
+        if read != WIN32_ERROR(0) {
+            return None;
+        }
+
+        let raw = u32::from_ne_bytes(buf);
+        let red = (raw & 0xFF) as u8;
+        let green = ((raw >> 8) & 0xFF) as u8;
+        let blue = ((raw >> 16) & 0xFF) as u8;
+        Some(format!("#{red:02X}{green:02X}{blue:02X}"))
+    }
+}
+
 /// Cached Windows version (avoids repeated syscalls).
 pub fn version() -> &'static WindowsVersion {
     static VERSION: OnceLock<WindowsVersion> = OnceLock::new();

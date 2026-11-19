@@ -54,7 +54,7 @@ export default function DashboardPage() {
                 </Badge>
               </div>
               {state.health.issues.length > 0 && (
-                <ul className="mt-4 space-y-2">
+                <ul className="mt-4 flex flex-col gap-2">
                   {state.health.issues.map((issue) => (
                     <li
                       key={`${issue.title}-${issue.detail}`}
@@ -141,7 +141,7 @@ export default function DashboardPage() {
                           ? {
                               background: "var(--accent)",
                               borderColor: "var(--accent)",
-                              color: "#06120d",
+                              color: "#ffffff",
                             }
                           : undefined
                       }

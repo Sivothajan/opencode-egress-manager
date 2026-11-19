@@ -65,7 +65,10 @@ export default function TorPage() {
           </Card>
 
           <Card title="How rotation works">
-            <ul className="list-disc space-y-2 pl-5 text-xs" style={{ color: "var(--muted-text)" }}>
+            <ul
+              className="list-disc flex flex-col gap-2 pl-5 text-xs"
+              style={{ color: "var(--muted-text)" }}
+            >
               <li>
                 Sends <code className="mono">SIGNAL NEWNYM</code> to the Tor control port.
               </li>

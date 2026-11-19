@@ -1,103 +1,136 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/geist";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/*
+ * Fluent 2 / Windows 11 theme.
+ *
+ * Values follow the WinUI Fluent token names: SolidBackgroundFillColor* for
+ * surfaces, TextFillColor* for text, ControlStrokeColor* for borders, and the
+ * system accent (#0078d4 light / #4cc2ff dark). The app is Windows-first, so
+ * these tokens are applied directly rather than behind a platform variant.
+ */
+
 :root {
-  /* App palette */
-  --bg: #f4f6fa;
-  --surface: #ffffff;
-  --surface-2: #eef1f6;
-  --border: #d9dfe9;
-  --text: #141a22;
-  --muted-text: #5b6675;
-  --accent: #1fa97a;
-  --accent-strong: #15805d;
-  --accent-soft: rgba(31, 169, 122, 0.14);
-  --danger: #c2402f;
-  --warn: #b07a12;
-  --ok: #1fa97a;
-  --info: #3b6fd4;
+  --radius: 0.25rem; /* Fluent ControlCornerRadius (4px) */
+
+  /* Surfaces */
+  --bg: #f3f3f3; /* SolidBackgroundFillColorBase (Mica fallback) */
+  --surface: #ffffff; /* SolidBackgroundFillColorSecondary */
+  --surface-2: #fafafa; /* SolidBackgroundFillColorTertiary */
+  --surface-3: #f0f0f0; /* SolidBackgroundFillColorQuarternary */
+  --border: rgba(0, 0, 0, 0.08); /* ControlStrokeColorDefault */
+  --border-strong: rgba(0, 0, 0, 0.16); /* ControlStrokeColorSecondary */
+  --text: #242424; /* TextFillColorPrimary */
+  --muted-text: #616161; /* TextFillColorSecondary */
+  --disabled-text: rgba(0, 0, 0, 0.36); /* TextFillColorDisabled */
+
+  /* Accent */
+  --accent: #0078d4; /* System accent / AccentFillColorDefault */
+  --accent-hover: #106ebe; /* AccentFillColorSecondary */
+  --accent-pressed: #005a9e; /* AccentFillColorTertiary */
+  --accent-strong: #106ebe;
+  --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
+
+  /* Status */
+  --danger: #c42b1c; /* SystemFillColorCritical */
+  --danger-soft: color-mix(in srgb, var(--danger) 12%, transparent);
+  --warn: #9d5d00; /* SystemFillColorCaution */
+  --warn-soft: color-mix(in srgb, var(--warn) 14%, transparent);
+  --ok: #107c10; /* SystemFillColorSuccess */
+  --ok-soft: color-mix(in srgb, var(--ok) 12%, transparent);
+  --info: #0078d4;
+  --info-soft: color-mix(in srgb, var(--info) 12%, transparent);
 
   /* shadcn-compatible semantic tokens */
-  --background: #f4f6fa;
-  --foreground: #141a22;
+  --background: #f3f3f3;
+  --foreground: #242424;
   --card: #ffffff;
-  --card-foreground: #141a22;
+  --card-foreground: #242424;
   --popover: #ffffff;
-  --popover-foreground: #141a22;
-  --primary: #1fa97a;
-  --primary-foreground: #06120d;
-  --secondary: #eef1f6;
-  --secondary-foreground: #141a22;
-  --muted: #eef1f6;
-  --muted-foreground: #5b6675;
-  --accent-foreground: #06120d;
-  --destructive: #c2402f;
-  --input: #d9dfe9;
-  --ring: #1fa97a;
-  --chart-1: #1fa97a;
-  --chart-2: #3b6fd4;
-  --chart-3: #b07a12;
-  --chart-4: #c2402f;
-  --chart-5: #5b6675;
-  --radius: 0.625rem;
-  --sidebar: #ffffff;
-  --sidebar-foreground: #141a22;
-  --sidebar-primary: #1fa97a;
-  --sidebar-primary-foreground: #06120d;
-  --sidebar-accent: #eef1f6;
-  --sidebar-accent-foreground: #141a22;
-  --sidebar-border: #d9dfe9;
-  --sidebar-ring: #1fa97a;
+  --popover-foreground: #242424;
+  --primary: var(--accent);
+  --primary-foreground: #ffffff;
+  --secondary: #fafafa;
+  --secondary-foreground: #242424;
+  --muted: #fafafa;
+  --muted-foreground: #616161;
+  --accent-foreground: #ffffff;
+  --destructive: #c42b1c;
+  --input: rgba(0, 0, 0, 0.16);
+  --ring: var(--accent);
+  --chart-1: var(--accent);
+  --chart-2: #8764b8;
+  --chart-3: #9d5d00;
+  --chart-4: #c42b1c;
+  --chart-5: #616161;
+  --sidebar: #f3f3f3;
+  --sidebar-foreground: #242424;
+  --sidebar-primary: var(--accent);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #fafafa;
+  --sidebar-accent-foreground: #242424;
+  --sidebar-border: rgba(0, 0, 0, 0.08);
+  --sidebar-ring: var(--accent);
 }
 
 .dark {
-  --bg: #0b1015;
-  --surface: #111820;
-  --surface-2: #18212b;
-  --border: #24303c;
-  --text: #e8edf3;
-  --muted-text: #93a1b1;
-  --accent: #27b988;
-  --accent-strong: #34d09c;
-  --accent-soft: rgba(39, 185, 136, 0.18);
-  --danger: #e06a55;
-  --warn: #d9a441;
-  --ok: #27b988;
-  --info: #6f9bea;
+  --bg: #202020;
+  --surface: #2b2b2b;
+  --surface-2: #2d2d2d;
+  --surface-3: #343434;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --text: #ffffff;
+  --muted-text: #9d9d9d;
+  --disabled-text: rgba(255, 255, 255, 0.36);
 
-  --background: #0b1015;
-  --foreground: #e8edf3;
-  --card: #111820;
-  --card-foreground: #e8edf3;
-  --popover: #111820;
-  --popover-foreground: #e8edf3;
-  --primary: #27b988;
-  --primary-foreground: #06120d;
-  --secondary: #18212b;
-  --secondary-foreground: #e8edf3;
-  --muted: #18212b;
-  --muted-foreground: #93a1b1;
-  --accent-foreground: #06120d;
-  --destructive: #e06a55;
-  --input: #24303c;
-  --ring: #27b988;
-  --chart-1: #27b988;
-  --chart-2: #6f9bea;
-  --chart-3: #d9a441;
-  --chart-4: #e06a55;
-  --chart-5: #93a1b1;
-  --sidebar: #111820;
-  --sidebar-foreground: #e8edf3;
-  --sidebar-primary: #27b988;
-  --sidebar-primary-foreground: #06120d;
-  --sidebar-accent: #18212b;
-  --sidebar-accent-foreground: #e8edf3;
-  --sidebar-border: #24303c;
-  --sidebar-ring: #27b988;
+  --accent: #4cc2ff;
+  --accent-hover: #60cdff;
+  --accent-pressed: #2aa8e8;
+  --accent-strong: #60cdff;
+  --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
+
+  --danger: #e81123;
+  --danger-soft: color-mix(in srgb, var(--danger) 16%, transparent);
+  --warn: #f7630c;
+  --warn-soft: color-mix(in srgb, var(--warn) 16%, transparent);
+  --ok: #54b054;
+  --ok-soft: color-mix(in srgb, var(--ok) 16%, transparent);
+  --info: #4cc2ff;
+  --info-soft: color-mix(in srgb, var(--info) 16%, transparent);
+
+  --background: #202020;
+  --foreground: #ffffff;
+  --card: #2b2b2b;
+  --card-foreground: #ffffff;
+  --popover: #2b2b2b;
+  --popover-foreground: #ffffff;
+  --primary: var(--accent);
+  --primary-foreground: #000000;
+  --secondary: #2d2d2d;
+  --secondary-foreground: #ffffff;
+  --muted: #2d2d2d;
+  --muted-foreground: #9d9d9d;
+  --accent-foreground: #000000;
+  --destructive: #e81123;
+  --input: rgba(255, 255, 255, 0.16);
+  --ring: var(--accent);
+  --chart-1: var(--accent);
+  --chart-2: #b58ee0;
+  --chart-3: #f7630c;
+  --chart-4: #e81123;
+  --chart-5: #9d9d9d;
+  --sidebar: #202020;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: var(--accent);
+  --sidebar-primary-foreground: #000000;
+  --sidebar-accent: #2d2d2d;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-ring: var(--accent);
 }
 
 html,
@@ -111,7 +144,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family:
-    "Segoe UI Variable",
+    "Segoe UI Variable Text",
     "Segoe UI",
     system-ui,
     -apple-system,
@@ -119,6 +152,7 @@ body {
   font-size: 14px;
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 * {
@@ -131,47 +165,113 @@ body {
 }
 
 .scroll-thin::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
 .scroll-thin::-webkit-scrollbar-thumb {
-  background: var(--border);
+  background: var(--border-strong);
   border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.scroll-thin::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-text);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.scroll-thin::-webkit-scrollbar-track {
+  background: transparent;
 }
 
+/*
+ * Fluent standard button. Used where the app needs a raw button rather than
+ * the shadcn Button primitive.
+ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 4px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background 100ms ease,
+    border-color 100ms ease;
+}
+.btn:hover {
+  background: var(--surface-2);
+}
+.btn:active {
+  background: var(--surface-3);
+}
+.btn:disabled {
+  color: var(--disabled-text);
+  cursor: default;
+  background: transparent;
+}
+.btn-sm {
+  height: 24px;
+  padding: 0 8px;
+  gap: 4px;
+  font-size: 12px;
+}
+
+/* Windows Settings-style navigation row. */
 .nav-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 9px 12px;
-  border-radius: 8px;
-  border: 1px solid transparent;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 4px;
   color: var(--muted-text);
-  background: transparent;
-  cursor: pointer;
+  font-size: 14px;
   text-align: left;
+  cursor: pointer;
   transition:
-    background 120ms ease,
-    color 120ms ease;
+    background 100ms ease,
+    color 100ms ease;
 }
 .nav-item:hover {
-  background: var(--surface-2);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
   color: var(--text);
 }
 .nav-item.active {
-  background: var(--accent-soft);
-  color: var(--accent-strong);
-  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--text);
+  font-weight: 600;
+}
+.nav-item.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent);
 }
 
+/* Fluent pill/tag. */
 .badge {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   border-radius: 999px;
-  padding: 3px 9px;
-  font-size: 11.5px;
+  padding: 2px 8px;
+  font-size: 12px;
   font-weight: 600;
   border: 1px solid var(--border);
   color: var(--muted-text);
@@ -179,82 +279,100 @@ body {
 }
 .badge.ok {
   color: var(--ok);
-  border-color: color-mix(in srgb, var(--ok) 40%, transparent);
+  border-color: transparent;
+  background: var(--ok-soft);
 }
 .badge.warn {
   color: var(--warn);
-  border-color: color-mix(in srgb, var(--warn) 45%, transparent);
+  border-color: transparent;
+  background: var(--warn-soft);
 }
 .badge.bad {
   color: var(--danger);
-  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+  border-color: transparent;
+  background: var(--danger-soft);
 }
 .badge.info {
   color: var(--info);
-  border-color: color-mix(in srgb, var(--info) 40%, transparent);
+  border-color: transparent;
+  background: var(--info-soft);
 }
 
 .log-box {
-  background: #0a0f14;
-  color: #c9d6e2;
+  background: #0c0c0c;
+  color: #e8e8e8;
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 10px 12px;
+  border-radius: 8px;
+  padding: 12px;
   font-family: "Cascadia Code", Consolas, monospace;
   font-size: 12px;
+  line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 340px;
   overflow-y: auto;
 }
 
-.toggle-knob {
-  transition:
-    transform 150ms ease,
-    background 150ms ease;
-}
-
 @theme inline {
-  --font-heading: var(--font-sans);
-  --font-sans: "Geist Variable", "Segoe UI Variable", sans-serif;
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
-  --color-card: var(--card);
-  --color-foreground: var(--foreground);
+  --font-heading: "Segoe UI Variable Display", "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  --font-sans: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Cascadia Code", Consolas, "SF Mono", monospace;
+
   --color-background: var(--background);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-hover: var(--accent-hover);
+  --color-control-hover: var(--surface-2);
+  --color-destructive: var(--destructive);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-border: var(--border);
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-muted-text: var(--muted-text);
+  --color-accent-soft: var(--accent-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --radius-sm: calc(var(--radius) * 0.5);
+  --radius-md: calc(var(--radius) * 0.75);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --radius-xl: calc(var(--radius) * 2);
+  --radius-2xl: calc(var(--radius) * 3);
+  --radius-3xl: calc(var(--radius) * 4);
+  --radius-4xl: calc(var(--radius) * 5);
 }
 
 @layer base {
@@ -262,7 +380,7 @@ body {
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans;
   }
   html {
     @apply font-sans;

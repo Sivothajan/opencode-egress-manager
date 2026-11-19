@@ -130,7 +130,7 @@ export default function SettingsPage() {
             </Card>
 
             <Card title="About">
-              <div className="space-y-1 text-xs" style={{ color: "var(--muted-text)" }}>
+              <div className="flex flex-col gap-1 text-xs" style={{ color: "var(--muted-text)" }}>
                 <p>Version v{state.platform.appVersion}</p>
                 <p>
                   Windows {state.platform.windowsVersion} · {state.platform.machineName}

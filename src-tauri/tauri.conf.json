@@ -21,12 +21,13 @@
         "resizable": true,
         "maximizable": true,
         "center": true,
-        "theme": "Dark",
+        "theme": "System",
         "dragDropEnabled": false,
         "decorations": true
       }
     ],
     "security": {
+      "capabilities": ["default"],
       "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
     }
   },

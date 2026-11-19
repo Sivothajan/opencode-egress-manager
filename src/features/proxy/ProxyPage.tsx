@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Ban, RefreshCw, ShieldAlert } from "lucide-react";
-import { Badge, Button, Card, EmptyState, Input, KeyValue, Switch } from "@/components/ui";
+import { Badge, Button, Card, EmptyState, Input, KeyValue, ToggleRow } from "@/components/ui";
 import {
   Table,
   TableBody,
@@ -103,16 +103,16 @@ export default function ProxyPage() {
           </Card>
 
           <Card title="Behavior">
-            <div className="space-y-3">
-              <ToggleLine
-                label="Strict fail-closed mode"
+            <div className="flex flex-col gap-3">
+              <ToggleRow
+                title="Strict fail-closed mode"
                 description="Never fall back to a direct route when the selected egress is down."
                 checked={state.settings.strictMode}
                 disabled={action.isPending}
                 onChange={(value) => action.mutate(() => toggleStrictMode(value))}
               />
-              <ToggleLine
-                label="OpenCode Desktop service"
+              <ToggleRow
+                title="OpenCode Desktop service"
                 description="Wire OpenCode's background service through this proxy."
                 checked={state.lane.desktopServiceWired}
                 disabled={action.isPending}
@@ -206,38 +206,5 @@ export default function ProxyPage() {
         </div>
       )}
     </PageContent>
-  );
-}
-
-function ToggleLine({
-  label,
-  description,
-  checked,
-  onChange,
-  disabled,
-}: {
-  label: string;
-  description?: string;
-  checked: boolean;
-  onChange: (value: boolean) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4">
-      <div>
-        <p className="text-[13px] font-medium">{label}</p>
-        {description && (
-          <p className="text-xs" style={{ color: "var(--muted-text)" }}>
-            {description}
-          </p>
-        )}
-      </div>
-      <Switch
-        checked={checked}
-        onCheckedChange={(value) => onChange(value)}
-        disabled={disabled}
-        aria-label={label}
-      />
-    </div>
   );
 }
