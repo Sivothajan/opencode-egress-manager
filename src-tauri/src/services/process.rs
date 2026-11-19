@@ -17,8 +17,9 @@ pub fn system_all() -> Option<sysinfo::System> {
 
 /// Stop running worker processes for a role.
 ///
-/// Matches this application's `--worker <role>` argument and the legacy Python
-/// worker scripts, so an upgrade does not leave two keepers fighting over WARP.
+/// Matches only this application's own `--worker <role>` processes. Legacy Python
+/// workers (`warp_keeper.py` / `zen_guard.py`) are never targeted, so an upgrade
+/// cannot terminate processes the Python app owns.
 pub async fn stop_worker_processes(role: &str) -> (u32, String) {
     if role != "keeper" && role != "guard" {
         return (0, format!("unknown worker role: {role}"));

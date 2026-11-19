@@ -32,6 +32,18 @@ duplicate version fields elsewhere.
 Current prerelease candidate: **0.3.1** (`v0.3.1`). The published `v0.3.0`
 prerelease and its assets remain unchanged.
 
+## Changes since v0.3.0
+
+- Fix auto-resume command construction (the CLI path was dropped, so resume tried to
+  spawn the literal argument `run`).
+- Stop replaying truncated or backlogged OpenCode logs as fresh quota walls.
+- Refactor `build_state` (single fact snapshot + named DTO builders) and
+  `build_health` (phase checks + summary), preserving messages, severity, and order.
+- Enable `#![deny(missing_docs)]` and document the public Rust API.
+- Harden SOCKS5 domain length handling, Win32 string-length handling, process exit-code
+  conversion, and cache-expiry `Instant` math.
+- Add the portable ZIP distribution and document installer/portable coexistence.
+
 ## Signing
 
 Set one pair before building:
