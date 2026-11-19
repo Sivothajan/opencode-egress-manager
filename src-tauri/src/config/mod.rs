@@ -390,16 +390,17 @@ pub enum Theme {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AppSettings {
-    #[serde(default = "truth")]
+    #[serde(default = "truth", alias = "auto_resume")]
     pub auto_resume: bool,
-    #[serde(default)]
+    #[serde(default, alias = "strict_mode")]
     pub strict_mode: bool,
-    #[serde(default = "truth")]
+    #[serde(default = "truth", alias = "auto_repair")]
     pub auto_repair: bool,
-    #[serde(default)]
+    #[serde(default, alias = "autostart")]
     pub autostart: bool,
-    #[serde(default)]
+    #[serde(default, alias = "theme")]
     pub theme: Theme,
 }
 
@@ -920,5 +921,32 @@ mod tests {
         write_flag(&flag, false).unwrap();
         assert!(!read_flag(&flag));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn settings_use_camel_case_and_accept_legacy_keys() {
+        let settings = AppSettings {
+            auto_resume: true,
+            strict_mode: true,
+            auto_repair: false,
+            autostart: true,
+            theme: Theme::Dark,
+        };
+        let json = serde_json::to_value(&settings).unwrap();
+        assert_eq!(json["autoResume"], true);
+        assert_eq!(json["strictMode"], true);
+        assert_eq!(json["autoRepair"], false);
+        assert_eq!(json["autostart"], true);
+        assert_eq!(json["theme"], "dark");
+
+        // Existing snake_case settings.json files must keep loading.
+        let legacy: AppSettings = serde_json::from_str(
+            r#"{"auto_resume":true,"strict_mode":true,"auto_repair":false,"autostart":true,"theme":"light"}"#,
+        )
+        .unwrap();
+        assert!(legacy.auto_resume);
+        assert!(legacy.strict_mode);
+        assert!(!legacy.auto_repair);
+        assert_eq!(legacy.theme, Theme::Light);
     }
 }

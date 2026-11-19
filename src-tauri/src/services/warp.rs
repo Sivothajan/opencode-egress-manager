@@ -609,6 +609,7 @@ fn validate_endpoint(endpoint: &str) -> Result<()> {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct EgressState {
     pub mode: String,
     pub warp_scope: String,
@@ -648,5 +649,37 @@ pub async fn egress_state(paths: &Paths) -> EgressState {
             .iter()
             .map(|s| s.to_string())
             .collect(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn egress_state_serializes_camel_case() {
+        let state = EgressState {
+            mode: "warp".into(),
+            warp_scope: "tun".into(),
+            custom_proxy: "127.0.0.1:10808".into(),
+            custom_type: "socks5".into(),
+            tor_active: false,
+            tor_target: "Not running".into(),
+            tor_running: false,
+            custom_pool_count: 1,
+            custom_current_node: "127.0.0.1:10808".into(),
+            clean_endpoints: vec!["162.159.192.1:2408".into()],
+        };
+        let json = serde_json::to_value(&state).unwrap();
+        assert_eq!(json["warpScope"], "tun");
+        assert_eq!(json["customProxy"], "127.0.0.1:10808");
+        assert_eq!(json["customType"], "socks5");
+        assert_eq!(json["torActive"], false);
+        assert_eq!(json["torTarget"], "Not running");
+        assert_eq!(json["torRunning"], false);
+        assert_eq!(json["customPoolCount"], 1);
+        assert_eq!(json["customCurrentNode"], "127.0.0.1:10808");
+        assert!(json["cleanEndpoints"].is_array());
+        assert!(json.get("clean_endpoints").is_none());
     }
 }

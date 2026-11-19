@@ -58,6 +58,7 @@ const FALLBACK_OPENCODE_AAAA: &[&str] = &[
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct NetworkInterface {
     pub name: String,
     #[serde(default)]
@@ -486,6 +487,23 @@ pub fn resolve_v6(host: &str, port: u16) -> Vec<Ipv6Addr> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn interfaces_serialize_camel_case() {
+        let iface = NetworkInterface {
+            name: "Ethernet".into(),
+            description: "Ethernet".into(),
+            mac: "AA:BB:CC:DD:EE:FF".into(),
+            ipv4: vec!["192.168.1.2".into()],
+            ipv6: vec!["fe80::1".into()],
+            is_up: true,
+            is_loopback: false,
+        };
+        let json = serde_json::to_value(&iface).unwrap();
+        assert_eq!(json["isUp"], true);
+        assert_eq!(json["isLoopback"], false);
+        assert!(json.get("is_up").is_none());
+    }
 
     #[test]
     fn normalizes_prefixes() {

@@ -3,6 +3,7 @@
 use serde::Serialize;
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct HealthIssue {
     pub level: String,
     pub title: String,
@@ -409,6 +410,20 @@ pub fn fix_action_id(action: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn health_issue_serializes_camel_case() {
+        let issue = HealthIssue {
+            level: "bad".into(),
+            title: "Local proxy is down".into(),
+            detail: "Port 41987 is not listening.".into(),
+            fix: Some("start_keeper".into()),
+            fix_label: "Start it".into(),
+        };
+        let json = serde_json::to_value(&issue).unwrap();
+        assert_eq!(json["fixLabel"], "Start it");
+        assert!(json.get("fix_label").is_none());
+    }
 
     fn base() -> HealthInput {
         HealthInput {

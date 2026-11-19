@@ -90,6 +90,7 @@ impl UiState {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RepairSnapshot {
     pub enabled: bool,
     pub status: String,
