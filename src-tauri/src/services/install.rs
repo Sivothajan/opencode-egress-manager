@@ -136,6 +136,21 @@ pub fn update_user_path(add: bool) -> Result<bool> {
             (String::new(), REG_VALUE_TYPE(REG_EXPAND_SZ.0))
         }
     };
+    // Yield to the legacy Python app: if its shim directory is already on the
+    // user PATH, do not jump ahead of it.
+    if add && crate::config::python_app_present() {
+        let python_bin = crate::config::python_bin_dir();
+        let python_bin = python_bin
+            .to_string_lossy()
+            .trim_end_matches('\\')
+            .to_ascii_lowercase();
+        let python_present = current
+            .split(';')
+            .any(|p| p.trim_end_matches('\\').eq_ignore_ascii_case(&python_bin));
+        if python_present {
+            return Ok(true);
+        }
+    }
     let mut parts: Vec<String> = current
         .split(';')
         .filter(|p| !p.is_empty())
@@ -152,6 +167,22 @@ pub fn update_user_path(add: bool) -> Result<bool> {
     write_user_path(&new_value, kind)?;
     broadcast_environment_change();
     Ok(true)
+}
+
+/// True when the legacy Python app's bin directory is first on the user PATH.
+pub fn python_path_first() -> bool {
+    let python_bin = crate::config::python_bin_dir();
+    let python_bin = python_bin
+        .to_string_lossy()
+        .trim_end_matches('\\')
+        .to_ascii_lowercase();
+    read_user_path()
+        .and_then(|(path, _)| {
+            path.split(';')
+                .next()
+                .map(|p| p.trim_end_matches('\\').eq_ignore_ascii_case(&python_bin))
+        })
+        .unwrap_or(false)
 }
 
 pub fn user_path_has_bin() -> bool {
@@ -304,9 +335,13 @@ pub async fn install_or_repair(paths: &Paths, app_exe: &Path) -> Result<String> 
     process::spawn_worker(app_exe, "keeper")?;
     process::spawn_worker(app_exe, "guard")?;
     tokio::time::sleep(Duration::from_millis(600)).await;
-    if let Some(bin) = &warp_bin {
-        let cfg = crate::config::EgressConfig::load(paths).unwrap_or_default();
-        let _ = warp::connect(bin, cfg.warp_scope).await;
+    // If the legacy Python keeper is running it owns the WARP tunnel; do not
+    // fight it over the global mode.
+    if !platform::mutex_held("OpencodeUnlimitedKeeper") {
+        if let Some(bin) = &warp_bin {
+            let cfg = crate::config::EgressConfig::load(paths).unwrap_or_default();
+            let _ = warp::connect(bin, cfg.warp_scope).await;
+        }
     }
     let wired = opencode::wire_service_proxy(paths, true).await.ok();
     let msg = match wired {
@@ -324,14 +359,20 @@ pub async fn uninstall_all(paths: &Paths, purge_state: bool) -> Result<String> {
     for role in ["guard", "keeper"] {
         process::stop_worker_processes(role).await;
     }
-    let _ = opencode::restore_service_backup();
+    let python_present = crate::config::python_app_present();
+    if !python_present {
+        let _ = opencode::restore_service_backup();
+    }
     let _ = opencode::wire_service_proxy(paths, false).await;
     if platform::is_admin() {
         let _ = crate::services::firewall::remove().await;
     }
     let _ = update_user_path(false);
-    if let Some(bin) = warp::find_warp_cli() {
-        let _ = warp::disconnect(&bin).await;
+    // Disconnecting WARP here would drop the legacy Python app's tunnel.
+    if !python_present {
+        if let Some(bin) = warp::find_warp_cli() {
+            let _ = warp::disconnect(&bin).await;
+        }
     }
     if purge_state && paths.data_root.is_dir() {
         std::fs::remove_dir_all(&paths.data_root)?;

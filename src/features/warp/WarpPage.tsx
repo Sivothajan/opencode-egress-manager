@@ -3,15 +3,16 @@ import { useMutation } from "@tanstack/react-query";
 import { Cloud, CloudOff, Loader2, RefreshCw, Wand2, Zap } from "lucide-react";
 import {
   Badge,
-  Button,
   Card,
   EmptyState,
+  HelpTip,
   KeyValue,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
+  TipButton,
 } from "@/components/ui";
 import {
   Table,
@@ -80,25 +81,35 @@ export default function WarpPage() {
             <KeyValue label="Adapter IPv6" value={state.warp.adapterV6 || "missing"} />
             <KeyValue label="Public IPv6" value={state.warp.egressV6 || "—"} />
             <div className="mt-3 flex flex-wrap gap-2">
-              <Button
+              <TipButton
                 size="sm"
                 disabled={action.isPending}
                 onClick={() => action.mutate(state.warp.connected ? warpDisconnect : warpConnect)}
+                tipTitle="Connect / Disconnect Cloudflare WARP"
+                tipBody="Toggles the Cloudflare WARP tunnel directly. Strict mode refuses requests while WARP is down; standard mode keeps OpenCode usable through the local fallback chain."
               >
                 {state.warp.connected ? <CloudOff size={13} /> : <Cloud size={13} />}
                 {state.warp.connected ? "Disconnect" : "Connect"}
-              </Button>
-              <Button size="sm" disabled={action.isPending} onClick={() => action.mutate(hopNow)}>
+              </TipButton>
+              <TipButton
+                size="sm"
+                disabled={action.isPending}
+                onClick={() => action.mutate(hopNow)}
+                tipTitle="Rotate Active Egress Now"
+                tipBody="Renews the WireGuard keys, reconnects in the current scope, and waits for a new IPv6 /64. The WARP device registration is kept."
+              >
                 <Zap size={13} />
                 Hop /64
-              </Button>
-              <Button
+              </TipButton>
+              <TipButton
                 size="sm"
                 disabled={action.isPending}
                 onClick={() => action.mutate(repairWarp)}
+                tipTitle="Fix WARP / Clear MITM Block"
+                tipBody="Renews WARP session keys, reconnects, and recreates the device registration only if it is actually missing. Resolves CF_HAPPY_EYEBALLS_MITM_FAILURE and 'Unable to reach destination' blocks."
               >
                 Repair keys
-              </Button>
+              </TipButton>
             </div>
           </Card>
 
@@ -117,8 +128,20 @@ export default function WarpPage() {
                       state.egress.warpScope === scope ? "var(--accent)" : "var(--border)",
                   }}
                 >
-                  <span className="text-[13px]">
+                  <span className="flex items-center gap-1.5 text-[13px]">
                     {scope === "tun" ? "Full System TUN" : "App-Only (Isolated Proxy)"}
+                    <HelpTip
+                      title={
+                        scope === "tun"
+                          ? "Full System TUN Mode"
+                          : "App-Only Isolated Mode (Recommended)"
+                      }
+                      body={
+                        scope === "tun"
+                          ? "Routes all Windows traffic through the CloudflareWARP virtual network adapter. Useful if you need a full system VPN."
+                          : "Only OpenCode traffic routes through WARP (port 40000 SOCKS5). Games, Discord, and browsing stay on the normal network path."
+                      }
+                    />
                   </span>
                   <input
                     type="radio"
@@ -131,15 +154,17 @@ export default function WarpPage() {
               ))}
             </div>
             <div className="mt-3">
-              <Button
+              <TipButton
                 size="sm"
                 variant="ghost"
                 disabled={action.isPending}
                 onClick={() => action.mutate(autoHealEndpoint)}
+                tipTitle="Clean WARP Endpoint Selector"
+                tipBody="In regions where Cloudflare's default WARP endpoint is blocked by ISPs, switch WARP's WireGuard tunnel endpoint to an alternate address."
               >
                 <Wand2 size={13} />
                 Auto-heal fastest endpoint
-              </Button>
+              </TipButton>
             </div>
           </Card>
 
@@ -171,14 +196,20 @@ export default function WarpPage() {
             title="Clean WireGuard endpoints"
             subtitle="Use when an ISP throttles or blocks Cloudflare's default Anycast path"
             actions={
-              <Button size="sm" disabled={ping.isPending} onClick={() => ping.mutate()}>
+              <TipButton
+                size="sm"
+                disabled={ping.isPending}
+                onClick={() => ping.mutate()}
+                tipTitle="Clean WireGuard Endpoint Selector"
+                tipBody="Benchmarks every built-in WireGuard endpoint so you can pick the fastest one for your ISP."
+              >
                 {ping.isPending ? (
                   <Loader2 size={13} className="animate-spin" />
                 ) : (
                   <RefreshCw size={13} />
                 )}
                 Ping test
-              </Button>
+              </TipButton>
             }
           >
             <div className="mb-3 flex flex-wrap gap-2">
@@ -201,21 +232,25 @@ export default function WarpPage() {
                   ))}
                 </SelectContent>
               </Select>
-              <Button
+              <TipButton
                 size="sm"
                 disabled={!selectedEndpoint || apply.isPending}
                 onClick={() => apply.mutate(selectedEndpoint)}
+                tipTitle="Clean WARP Endpoint Selector"
+                tipBody="Applies the selected WireGuard endpoint so WARP tunnels through an alternate address."
               >
                 Apply endpoint
-              </Button>
-              <Button
+              </TipButton>
+              <TipButton
                 size="sm"
                 variant="ghost"
                 disabled={action.isPending}
                 onClick={() => action.mutate(resetCleanEndpoint)}
+                tipTitle="Clean WARP Endpoint Selector"
+                tipBody="Resets WARP's WireGuard tunnel endpoint to the default (WireGuard) address."
               >
                 Reset default
-              </Button>
+              </TipButton>
             </div>
             {endpointError && (
               <p className="mb-2 text-xs" style={{ color: "var(--danger)" }}>
@@ -223,26 +258,24 @@ export default function WarpPage() {
               </p>
             )}
             {ping.data ? (
-              <div className="overflow-x-auto scroll-thin">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Endpoint</TableHead>
-                      <TableHead>Latency</TableHead>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Endpoint</TableHead>
+                    <TableHead>Latency</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {ping.data.map((item) => (
+                    <TableRow key={item.endpoint}>
+                      <TableCell className="mono">{item.endpoint}</TableCell>
+                      <TableCell className="mono">
+                        {item.latency === null ? "unreachable" : `${item.latency.toFixed(1)} ms`}
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {ping.data.map((item) => (
-                      <TableRow key={item.endpoint}>
-                        <TableCell className="mono">{item.endpoint}</TableCell>
-                        <TableCell className="mono">
-                          {item.latency === null ? "unreachable" : `${item.latency.toFixed(1)} ms`}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                  ))}
+                </TableBody>
+              </Table>
             ) : (
               <EmptyState
                 title="No latency data yet"

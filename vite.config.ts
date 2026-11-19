@@ -33,6 +33,23 @@ export default defineConfig({
     target: "es2022",
     outDir: "dist",
     emptyOutDir: true,
+    rolldownOptions: {
+      output: {
+        // Split the stable vendor libraries out of the app shell so the
+        // initial download is smaller and cached across route changes.
+        codeSplitting: {
+          groups: [
+            { name: "react", test: /node_modules[\\/]react[\\/]/ },
+            { name: "react-dom", test: /node_modules[\\/]react-dom[\\/]/ },
+            { name: "router", test: /node_modules[\\/]react-router[\\/]/ },
+            { name: "router-dom", test: /node_modules[\\/]react-router-dom[\\/]/ },
+            { name: "query", test: /node_modules[\\/]@tanstack[\\/]/ },
+            { name: "state", test: /node_modules[\\/](zustand|zod)[\\/]/ },
+            { name: "icons", test: /node_modules[\\/]lucide-react[\\/]/ },
+          ],
+        },
+      },
+    },
   },
   test: {
     globals: true,

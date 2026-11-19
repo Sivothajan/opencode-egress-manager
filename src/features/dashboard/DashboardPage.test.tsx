@@ -43,7 +43,7 @@ describe("DashboardPage", () => {
             {
               level: "bad",
               title: "Local proxy is down",
-              detail: "Port 41987 is not listening.",
+              detail: "Port 41988 is not listening.",
               fix: "start_keeper",
               fixLabel: "Start it",
             },

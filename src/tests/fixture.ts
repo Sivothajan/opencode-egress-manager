@@ -32,7 +32,7 @@ export function makeState(overrides: Partial<AppState> = {}): AppState {
       keeperTaskEnabled: true,
       guardTaskEnabled: true,
       proxyListening: true,
-      proxyPort: 41987,
+      proxyPort: 41988,
       firewallInstalled: false,
       isAdmin: false,
       autoResume: true,
@@ -54,6 +54,7 @@ export function makeState(overrides: Partial<AppState> = {}): AppState {
     stats: {
       hops: 3,
       blacklistCount: 1,
+      blacklist: ["2606:4700:1234:5678::"],
       lastHop: Math.floor(Date.now() / 1000) - 120,
       failedHops: 0,
       backoffUntil: 0,
@@ -101,6 +102,15 @@ export function makeState(overrides: Partial<AppState> = {}): AppState {
       autoRepair: true,
       autostart: true,
       theme: "system",
+    },
+    management: {
+      pythonInstalled: false,
+      pythonKeeperRunning: false,
+      pythonGuardRunning: false,
+      warpOwner: "tauri",
+      serviceOwner: "tauri",
+      firewallOwner: "none",
+      shimOwner: "tauri",
     },
     ...overrides,
   };

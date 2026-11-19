@@ -10,6 +10,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  TipButton,
   ToggleRow,
 } from "@/components/ui";
 import { PageContent } from "@/components/PageContent";
@@ -75,6 +76,8 @@ export default function SettingsPage() {
                   checked={state.settings.autoResume}
                   disabled={action.isPending}
                   onChange={(value) => action.mutate(() => toggleAutoResume(value))}
+                  tipTitle="Auto-Resume on Bypass"
+                  tipBody="After a successful rotation, reloads the OpenCode window and sends a 'continue' prompt through the CLI or keystrokes."
                 />
                 <ToggleRow
                   title="Strict fail-closed mode"
@@ -82,6 +85,8 @@ export default function SettingsPage() {
                   checked={state.settings.strictMode}
                   disabled={action.isPending}
                   onChange={(value) => action.mutate(() => toggleStrictMode(value))}
+                  tipTitle="Strict Fail-Closed Mode"
+                  tipBody="When ON, the proxy refuses connections if WARP is down. When OFF (Recommended), it falls back to a direct connection instead of returning a 503 error."
                 />
                 <ToggleRow
                   title="Auto-repair"
@@ -89,6 +94,8 @@ export default function SettingsPage() {
                   checked={state.autoRepair.enabled}
                   disabled={action.isPending}
                   onChange={(value) => action.mutate(() => toggleAutoRepair(value))}
+                  tipTitle="Automatic Route Repair"
+                  tipBody="Watches the proxy and tunnel. If OpenCode loses its route, it restarts the proxy, reconnects WARP, or changes edge automatically. It never changes your selected mode, clears chats, or restarts OpenCode."
                 />
                 <ToggleRow
                   title="Logon auto-start"
@@ -96,6 +103,8 @@ export default function SettingsPage() {
                   checked={state.services.autostartRegistered}
                   disabled={action.isPending}
                   onChange={(value) => action.mutate(() => toggleAutostart(value))}
+                  tipTitle="Auto-Start at Windows Login"
+                  tipBody="Registers OpencodeEgressManager-Keeper and OpencodeEgressManager-Guard in Windows Task Scheduler (AtLogOn) so protection starts silently on every reboot."
                 />
                 <ToggleRow
                   title="Firewall kill-switch"
@@ -103,24 +112,41 @@ export default function SettingsPage() {
                   checked={state.services.firewallInstalled}
                   disabled={action.isPending || !state.lane.cliPath}
                   onChange={(value) => action.mutate(() => toggleFirewall(value))}
+                  tipTitle="Windows Firewall Kill-Switch"
+                  tipBody="Blocks opencode-cli.exe from making direct outbound internet connections, forcing all of its traffic through the localhost proxy and WARP. Prompts for UAC approval when toggled."
                 />
               </div>
             </Card>
 
             <Card title="Maintenance">
               <div className="flex flex-wrap gap-2">
-                <Button disabled={action.isPending} onClick={() => action.mutate(installOrRepair)}>
+                <TipButton
+                  disabled={action.isPending}
+                  onClick={() => action.mutate(installOrRepair)}
+                  tipTitle="Install / Repair Everything"
+                  tipBody="Deploys shims to %LOCALAPPDATA%\opencode-egress-manager, updates User PATH, registers logon tasks, connects WARP in the selected scope, and wires OpenCode Desktop."
+                >
                   <Wrench size={14} />
                   Install / Repair
-                </Button>
-                <Button variant="ghost" onClick={() => openLogsFolder()}>
+                </TipButton>
+                <TipButton
+                  variant="ghost"
+                  onClick={() => openLogsFolder()}
+                  tipTitle="Open Data & Logs Folder"
+                  tipBody="Opens %LOCALAPPDATA%\opencode-egress-manager in File Explorer so you can inspect logs and state directly."
+                >
                   <FolderOpen size={14} />
                   Logs folder
-                </Button>
-                <Button variant="danger" onClick={() => setConfirmUninstall(true)}>
+                </TipButton>
+                <TipButton
+                  variant="danger"
+                  onClick={() => setConfirmUninstall(true)}
+                  tipTitle="Uninstall Cleanly"
+                  tipBody="Stops Keeper & Guard, removes Scheduled Tasks, removes the firewall rule, restores OpenCode Desktop service to direct egress, cleans PATH, and deletes %LOCALAPPDATA%\opencode-egress-manager. Your OpenCode projects & chats are untouched."
+                >
                   <Trash2 size={14} />
                   Uninstall
-                </Button>
+                </TipButton>
               </div>
               <p className="mt-3 text-xs" style={{ color: "var(--muted-text)" }}>
                 Install creates shims and scheduled tasks, wires OpenCode's background service, and

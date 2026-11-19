@@ -136,7 +136,9 @@
 html,
 body,
 #root {
+  /* The shell is the only viewport-sized layer; nothing above it may scroll. */
   height: 100%;
+  overflow: hidden;
 }
 
 body {
@@ -181,6 +183,11 @@ body {
 }
 .scroll-thin::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* Keep wheel/touchpad gestures inside the panel instead of chaining to the window. */
+.scroll-thin {
+  overscroll-behavior: contain;
 }
 
 /*
@@ -309,8 +316,10 @@ body {
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
-  max-height: 340px;
+  max-height: min(340px, 45vh);
+  overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 @theme inline {

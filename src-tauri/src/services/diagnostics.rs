@@ -33,6 +33,8 @@ pub struct HealthInput {
     pub proxy_listening: bool,
     pub svc_wired: bool,
     pub path_wired: bool,
+    /// OpenCode is already routed through the legacy Python app's proxy.
+    pub external_svc_wired: bool,
     pub installed: bool,
     pub probe_ok: Option<bool>,
     pub probe_code: String,
@@ -77,6 +79,7 @@ pub fn build_health(input: &HealthInput) -> HealthSummary {
         && (input.desktop_installed || input.cli_installed)
         && !input.svc_wired
         && !input.path_wired
+        && !input.external_svc_wired
     {
         issues.push(add(
             "warn",
@@ -90,7 +93,10 @@ pub fn build_health(input: &HealthInput) -> HealthSummary {
         issues.push(add(
             "bad",
             "OpenCode can't connect right now",
-            "OpenCode is set to go through the local proxy on port 41987, but it isn't running. Messages fail with ECONNREFUSED until it's back.",
+            &format!(
+                "OpenCode is set to go through the local proxy on port {}, but it isn't running. Messages fail with ECONNREFUSED until it's back.",
+                crate::config::SERVICE_PROXY_PORT_DEFAULT
+            ),
             Some("start_keeper"),
             "Start it",
         ));
@@ -336,7 +342,7 @@ pub fn build_health(input: &HealthInput) -> HealthSummary {
     }
 
     let bad = issues.iter().any(|i| i.level == "bad");
-    let wired = input.svc_wired || input.path_wired;
+    let wired = input.svc_wired || input.path_wired || input.external_svc_wired;
     let (status, title, sub) = if input.rotating {
         (
             "busy",
@@ -416,7 +422,7 @@ mod tests {
         let issue = HealthIssue {
             level: "bad".into(),
             title: "Local proxy is down".into(),
-            detail: "Port 41987 is not listening.".into(),
+            detail: "Port 41988 is not listening.".into(),
             fix: Some("start_keeper".into()),
             fix_label: "Start it".into(),
         };

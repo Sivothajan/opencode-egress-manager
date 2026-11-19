@@ -115,7 +115,7 @@ pub fn find_opencode_cli() -> Option<PathBuf> {
             let exe = process.exe().map(|p| p.to_path_buf());
             let Some(exe) = exe else { continue };
             let low = exe.to_string_lossy().to_ascii_lowercase();
-            if low.contains("opencode-egress-manager") {
+            if low.contains("opencode-egress-manager") || low.contains("opencode-unlimited") {
                 continue;
             }
             if name.to_ascii_lowercase().contains("opencode-cli") && exe.is_file() {
@@ -151,7 +151,7 @@ pub fn find_opencode_cli() -> Option<PathBuf> {
     for name in ["opencode.exe", "opencode"] {
         if let Ok(path) = which::which(name) {
             let low = path.to_string_lossy().to_ascii_lowercase();
-            if low.contains("opencode-egress-manager") {
+            if low.contains("opencode-egress-manager") || low.contains("opencode-unlimited") {
                 continue;
             }
             if low.contains("ai.opencode.desktop") && !low.ends_with("opencode-cli.exe") {
@@ -231,6 +231,14 @@ fn read_service_config(path: &Path) -> Option<serde_json::Value> {
 /// Wire or unwire OpenCode's background service proxy variables, preserving all
 /// unrelated keys and keeping a rollback snapshot.
 pub async fn wire_service_proxy(paths: &Paths, enable: bool) -> Result<String> {
+    // The Python app owns the single OpenCode service configuration. Never
+    // overwrite or unwire it while that app is installed.
+    if crate::config::python_app_present() {
+        return Ok(
+            "Opencode Unlimited is installed; leaving its service.json proxy wiring untouched."
+                .into(),
+        );
+    }
     let path = Paths::opencode_service_config();
     let proxy_url = format!(
         "http://127.0.0.1:{}",
@@ -357,6 +365,16 @@ pub struct DbStats {
 /// Delete client-side rate-limit lockout rows from drafts.sqlite.
 ///
 /// Only the `state` rows named below are removed; chat history is untouched.
+const LOCKOUT_SQL: &str = "DELETE FROM state WHERE key IN \
+    ('free-limit','go-upsell','free_usage_limit','usage_limit','quota_exceeded','chatgpt-usage-limit')";
+
+fn purge_lockouts(conn: &rusqlite::Connection) -> rusqlite::Result<usize> {
+    // `chatgpt-usage-limit` is the key current OpenCode Desktop actually uses
+    // (verified against a live drafts.sqlite); the older keys are kept for
+    // compatibility with older installs.
+    conn.execute(LOCKOUT_SQL, [])
+}
+
 pub fn clear_free_limit() -> i64 {
     let db_path = Paths::opencode_drafts_db();
     if !db_path.is_file() {
@@ -373,10 +391,7 @@ pub fn clear_free_limit() -> i64 {
         }
     };
     let _ = conn.busy_timeout(Duration::from_millis(5000));
-    match conn.execute(
-        "DELETE FROM state WHERE key IN ('free-limit','go-upsell','free_usage_limit','usage_limit','quota_exceeded')",
-        [],
-    ) {
+    match purge_lockouts(&conn) {
         Ok(changed) => changed as i64,
         Err(err) => {
             tracing::debug!(error = %err, "drafts.sqlite lockout purge failed");
@@ -424,14 +439,7 @@ pub struct SessionInfo {
     pub title: String,
 }
 
-pub fn latest_session() -> Option<SessionInfo> {
-    let db_path = Paths::opencode_db();
-    if !db_path.is_file() {
-        return None;
-    }
-    let conn =
-        rusqlite::Connection::open_with_flags(&db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
-            .ok()?;
+fn latest_session_in(conn: &rusqlite::Connection) -> Option<SessionInfo> {
     let row: Option<(String, Option<String>, Option<String>)> = conn
         .query_row(
             "SELECT id, directory, title FROM session_v2 WHERE time_archived IS NULL ORDER BY time_updated DESC LIMIT 1",
@@ -452,6 +460,27 @@ pub fn latest_session() -> Option<SessionInfo> {
     })
 }
 
+pub fn latest_session() -> Option<SessionInfo> {
+    let db_path = Paths::opencode_db();
+    if !db_path.is_file() {
+        return None;
+    }
+    let conn =
+        rusqlite::Connection::open_with_flags(&db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .ok()?;
+    latest_session_in(&conn)
+}
+
+fn session_directory_in(conn: &rusqlite::Connection, session_id: &str) -> Option<String> {
+    conn.query_row(
+        "SELECT directory FROM session_v2 WHERE id = ?1",
+        [session_id],
+        |row| row.get::<_, Option<String>>(0),
+    )
+    .ok()
+    .flatten()
+}
+
 pub fn session_directory(session_id: &str) -> Option<String> {
     if session_id.len() > 128
         || !session_id
@@ -465,13 +494,7 @@ pub fn session_directory(session_id: &str) -> Option<String> {
         rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
     )
     .ok()?;
-    conn.query_row(
-        "SELECT directory FROM session_v2 WHERE id = ?1",
-        [session_id],
-        |row| row.get::<_, Option<String>>(0),
-    )
-    .ok()
-    .flatten()
+    session_directory_in(&conn, session_id)
 }
 
 fn opencode_command(cli: &Path, args: &[String]) -> Vec<String> {
@@ -508,12 +531,43 @@ fn stdio_safe_command(program: &str, args: &[String]) -> tokio::process::Command
     cmd
 }
 
+/// End an earlier `continue` we sent to this session if it is still hanging around.
+fn stop_stale_continue(cli: &Path, session_id: &str) {
+    let Some(system) = crate::services::process::system_all() else {
+        return;
+    };
+    let exe_name = cli
+        .file_name()
+        .map(|n| n.to_string_lossy().to_ascii_lowercase())
+        .unwrap_or_default();
+    for (pid, process) in system.processes() {
+        if pid.as_u32() == std::process::id() {
+            continue;
+        }
+        if process.name().to_string_lossy().to_ascii_lowercase() != exe_name {
+            continue;
+        }
+        let cmd: Vec<String> = process
+            .cmd()
+            .iter()
+            .map(|a| a.to_string_lossy().to_ascii_lowercase())
+            .collect();
+        let has_run = cmd.iter().any(|a| a == "run");
+        let has_session = cmd.iter().any(|a| a == session_id);
+        let ends_continue = cmd.last().map(|a| a == "continue").unwrap_or(false);
+        if has_run && has_session && ends_continue {
+            let _ = process.kill();
+        }
+    }
+}
+
 /// Dispatch `opencode run --session <id> continue` without a console window.
 pub async fn resume_sessions(session_ids: &[String]) -> Result<(u32, Vec<String>)> {
     let cli = find_opencode_cli().ok_or_else(|| AppError::not_found("OpenCode CLI not found"))?;
     let mut sent = 0;
     let mut notes = Vec::new();
     for sid in session_ids.iter().filter(|s| !s.is_empty()) {
+        stop_stale_continue(&cli, sid);
         let directory = session_directory(sid);
         let cwd = directory.as_deref().map(Path::new).filter(|p| p.is_dir());
         let base = vec![
@@ -788,6 +842,76 @@ mod tests {
     }
 
     #[test]
+    fn lockout_purge_removes_the_real_key() {
+        let dir = std::env::temp_dir().join(format!("ouc-lockout-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("drafts.sqlite");
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute(
+            "CREATE TABLE state (name text NOT NULL, key text NOT NULL, value text NOT NULL, \
+             updated_at integer NOT NULL, CONSTRAINT state_pk PRIMARY KEY (name, key))",
+            [],
+        )
+        .unwrap();
+        for key in [
+            "chatgpt-usage-limit",
+            "free-limit",
+            "go-upsell",
+            "settings.v3",
+        ] {
+            conn.execute(
+                "INSERT INTO state (name, key, value, updated_at) \
+                 VALUES ('opencode.global.dat', ?1, '{}', 0)",
+                [key],
+            )
+            .unwrap();
+        }
+        let deleted = purge_lockouts(&conn).unwrap();
+        assert_eq!(deleted, 3);
+        let remaining: Vec<String> = conn
+            .prepare("SELECT key FROM state ORDER BY key")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(0))
+            .unwrap()
+            .map(|v| v.unwrap())
+            .collect();
+        assert_eq!(remaining, vec!["settings.v3".to_string()]);
+        conn.close().ok();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn session_queries_match_the_real_schema() {
+        let dir = std::env::temp_dir().join(format!("ouc-session-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("opencode.db");
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute(
+            "CREATE TABLE session_v2 (id text PRIMARY KEY, directory text NOT NULL, \
+             title text, time_updated integer NOT NULL, time_archived integer)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO session_v2 (id, directory, title, time_updated, time_archived) \
+             VALUES ('ses_abc', 'C:/work', 'Demo', 2, NULL), \
+                    ('ses_old', 'C:/old', 'Old', 1, 5)",
+            [],
+        )
+        .unwrap();
+        let latest = latest_session_in(&conn).unwrap();
+        assert_eq!(latest.id, "ses_abc");
+        assert_eq!(latest.directory, "C:/work");
+        assert_eq!(
+            session_directory_in(&conn, "ses_abc").as_deref(),
+            Some("C:/work")
+        );
+        assert!(session_directory_in(&conn, "ses_missing").is_none());
+        conn.close().ok();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn splits_cmd_wrappers() {
         let full = vec![
             "cmd.exe".into(),
@@ -806,7 +930,7 @@ mod tests {
 
     #[test]
     fn detects_wired_service() {
-        let status = service_config_status(41987);
+        let status = service_config_status(crate::config::SERVICE_PROXY_PORT_DEFAULT);
         assert_eq!(status.path, Paths::opencode_service_config());
     }
 }

@@ -1,5 +1,5 @@
 import { Database, Monitor, Terminal, Wrench } from "lucide-react";
-import { Badge, Button, Card, KeyValue, Switch } from "@/components/ui";
+import { Badge, Card, HelpTip, KeyValue, Switch, TipButton } from "@/components/ui";
 import { PageContent } from "@/components/PageContent";
 import { useStateAction, useStateQuery } from "@/hooks/useAppState";
 import {
@@ -47,33 +47,49 @@ export default function OpencodePage() {
               </div>
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
-              <Button
+              <TipButton
                 size="sm"
                 disabled={action.isPending}
                 onClick={() => action.mutate(launchDesktop)}
+                tipTitle="Launch OpenCode Desktop (OpenCode.exe)"
+                tipBody="Opens the OpenCode Desktop GUI app wired to 127.0.0.1:41988. All 5 projects, 36+ existing chats, and ongoing sessions load normally from opencode.db."
               >
                 Launch Desktop
-              </Button>
-              <Button
+              </TipButton>
+              <TipButton
                 size="sm"
                 disabled={action.isPending}
                 onClick={() => action.mutate(launchCli)}
+                tipTitle="Launch OpenCode CLI (Zen Lane)"
+                tipBody="Opens a fresh terminal running OpenCode CLI in --standalone mode with its own per-launch IPv6 proxy and random Cloudflare edge."
               >
                 Open CLI terminal
-              </Button>
-              <Button
+              </TipButton>
+              <TipButton
                 size="sm"
                 variant="ghost"
                 disabled={action.isPending}
                 onClick={() => action.mutate(fixOpencodeService)}
+                tipTitle="Fix OpenCode Service"
+                tipBody="Stops and restarts the OpenCode background service through its own CLI, re-wires the local proxy, and verifies that the service reports a listening address."
               >
                 <Wrench size={13} />
                 Fix service
-              </Button>
+              </TipButton>
             </div>
           </Card>
 
-          <Card title="Background service wiring">
+          <Card
+            title={
+              <span className="flex items-center gap-1.5">
+                Background service wiring
+                <HelpTip
+                  title="OpenCode Desktop Service Proxy (service.json)"
+                  body="Configures opencode's background server (serve --service, used by OpenCode.exe) to route through 127.0.0.1:41988 so opening the normal Desktop app is automatically protected."
+                />
+              </span>
+            }
+          >
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-[13px] font-medium">service.json proxy variables</p>
@@ -101,7 +117,17 @@ export default function OpencodePage() {
             </div>
           </Card>
 
-          <Card title="Session recovery">
+          <Card
+            title={
+              <span className="flex items-center gap-1.5">
+                Session recovery
+                <HelpTip
+                  title="Auto-Resume on Bypass"
+                  body="After a successful rotation, reloads the OpenCode window and sends a 'continue' prompt through the CLI or keystrokes."
+                />
+              </span>
+            }
+          >
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-[13px] font-medium">Auto-resume after rotation</p>

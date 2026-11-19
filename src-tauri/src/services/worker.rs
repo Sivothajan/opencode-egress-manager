@@ -137,19 +137,24 @@ async fn keeper_main(paths: &Paths) -> i32 {
                 {
                     service_proxy = proxy::server::start_proxy_server(paths, SERVICE_PROXY_PORT_DEFAULT).await.ok();
                 }
-                let cfg = EgressConfig::load(paths).unwrap_or_default();
-                match cfg.mode {
-                    crate::config::EgressMode::Warp | crate::config::EgressMode::Clean => {
-                        if let Some(bin) = &warp_bin {
-                            if !crate::config::is_paused(paths) {
-                                warp::ensure_connected(bin, paths).await;
+                // The legacy Python keeper owns the shared WARP tunnel and Tor
+                // daemon while it runs; in that case this keeper only hosts the
+                // proxy and leaves WARP/Tor management to it.
+                if !platform::mutex_held("OpencodeUnlimitedKeeper") {
+                    let cfg = EgressConfig::load(paths).unwrap_or_default();
+                    match cfg.mode {
+                        crate::config::EgressMode::Warp | crate::config::EgressMode::Clean => {
+                            if let Some(bin) = &warp_bin {
+                                if !crate::config::is_paused(paths) {
+                                    warp::ensure_connected(bin, paths).await;
+                                }
                             }
                         }
+                        crate::config::EgressMode::Tor => {
+                            maintain_tor(paths).await;
+                        }
+                        crate::config::EgressMode::Custom => {}
                     }
-                    crate::config::EgressMode::Tor => {
-                        maintain_tor(paths).await;
-                    }
-                    crate::config::EgressMode::Custom => {}
                 }
             }
         }
@@ -199,6 +204,16 @@ async fn maintain_tor(paths: &Paths) {
 // ---------------------------------------------------------------------------
 
 async fn guard_main(paths: &Paths) -> i32 {
+    // Two quota-wall guards would both rotate WARP and churn the tunnel. If the
+    // legacy Python guard is running, stand down and let it own rotation.
+    if platform::mutex_held("OpencodeUnlimitedGuard") {
+        crate::config::append_log(
+            &paths.guard_log_file(),
+            "Opencode Unlimited guard is running - standing down",
+            1_048_576,
+        );
+        return 0;
+    }
     let Some(_mutex) = platform::lock_mutex("OpencodeEgressManagerGuard") else {
         return 0;
     };
@@ -421,6 +436,11 @@ fn note_wall(state: &mut GuardState, paths: &Paths, now: i64) -> bool {
 }
 
 async fn guard_tick(paths: &Paths, state: &mut GuardState) -> Result<()> {
+    // Fail-safe against a check/use race: if the legacy Python guard appears
+    // after startup, stop rotating rather than fight it for WARP.
+    if platform::mutex_held("OpencodeUnlimitedGuard") {
+        return Ok(());
+    }
     let now = now_epoch();
     if state.backoff_until > now {
         // Still paused: leave queued work alone.

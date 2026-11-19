@@ -15,7 +15,7 @@ import {
   Wifi,
 } from "lucide-react";
 import logo from "@/assets/logo-mark.png";
-import { Badge, Button, LoadingState } from "@/components/ui";
+import { Badge, HelpTip, LoadingState, TipButton, WarningBanner } from "@/components/ui";
 import { useStateQuery } from "@/hooks/useAppState";
 import { Toasts } from "@/components/Toasts";
 
@@ -107,16 +107,20 @@ export default function AppShell() {
   );
 
   return (
-    <div className="flex h-full bg-background">
+    <div className="flex h-dvh min-h-0 overflow-hidden bg-background">
       <aside
-        className="flex w-[260px] shrink-0 flex-col border-r border-border"
+        className="flex min-h-0 w-[260px] shrink-0 flex-col overflow-hidden border-r border-border"
         style={{ background: "var(--bg)" }}
       >
         <div className="flex items-center gap-3 px-4 pt-5 pb-4">
           <img src={logo} alt="" width={32} height={32} className="rounded-md" />
           <div className="min-w-0">
-            <p className="font-heading text-[14px] leading-tight font-semibold text-foreground">
+            <p className="flex items-center gap-1.5 font-heading text-[14px] leading-tight font-semibold text-foreground">
               Opencode Egress Manager
+              <HelpTip
+                title="Opencode Egress Manager"
+                body="Windows controller for Cloudflare WARP IPv6 identity rotation, Cloudflare edge pinning, and quota-wall auto-healing across OpenCode Desktop and OpenCode CLI."
+              />
             </p>
             <p className="text-[11px] leading-tight text-muted-foreground">
               Windows control center
@@ -124,7 +128,7 @@ export default function AppShell() {
           </div>
         </div>
 
-        <nav className="flex flex-col gap-0.5 px-2">
+        <nav className="scroll-thin flex min-h-0 flex-1 flex-col gap-0.5 overflow-x-hidden overflow-y-auto px-2">
           {NAV.map((item) => (
             <NavLink
               key={item.to}
@@ -144,13 +148,25 @@ export default function AppShell() {
           </p>
           <div className="flex flex-col gap-2.5">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-[12px] text-muted-foreground">Keeper</span>
+              <span className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
+                Keeper
+                <HelpTip
+                  title="WARP Keeper (Background Watchdog + Desktop Proxy)"
+                  body="Runs silently every 45s to keep WARP connected in the selected scope, repair dead tunnels, and host the Desktop/service proxy on 127.0.0.1:41988."
+                />
+              </span>
               <Badge tone={state?.services.keeperRunning ? "ok" : "warn"}>
                 {state?.services.keeperRunning ? "Running" : "Off"}
               </Badge>
             </div>
             <div className="flex items-center justify-between gap-2">
-              <span className="text-[12px] text-muted-foreground">Guard</span>
+              <span className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
+                Guard
+                <HelpTip
+                  title="Zen Guard (Quota Wall Auto-Rotator)"
+                  body="Tails opencode.log every 10s by byte offset. When 'QuotaExceeded' appears, it blacklists the current /64 and rotates WARP automatically. A rotation usually completes within a minute."
+                />
+              </span>
               <Badge tone={state?.services.guardRunning ? "ok" : "warn"}>
                 {state?.services.guardRunning ? "Running" : "Off"}
               </Badge>
@@ -158,14 +174,14 @@ export default function AppShell() {
             <div className="flex items-center justify-between gap-2">
               <span className="text-[12px] text-muted-foreground">Proxy</span>
               <Badge tone={state?.services.proxyListening ? "ok" : "warn"}>
-                {state?.services.proxyPort ?? 41987}
+                {state?.services.proxyPort ?? 41988}
               </Badge>
             </div>
           </div>
         </div>
       </aside>
 
-      <main className="flex min-w-0 flex-1 flex-col">
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="flex items-start justify-between gap-4 px-6 pt-6 pb-4">
           <div className="min-w-0">
             <h1 className="font-heading text-[20px] leading-tight font-semibold text-foreground">
@@ -180,20 +196,35 @@ export default function AppShell() {
                 {state.health.title}
               </Badge>
             )}
-            <Button
+            <HelpTip
+              title="Protection & Tunnel Status"
+              body="Live overall state. Green means WARP is connected and the egress route is verified. Standard mode falls back to the local route if WARP drops; strict mode refuses requests instead."
+            />
+            <TipButton
               size="sm"
               onClick={() => stateQuery.refetch()}
               disabled={refreshing}
               aria-label="Refresh"
+              tipTitle="Force Live Refresh"
+              tipBody="Immediately polls WARP status, queries the active egress route, refreshes the opencode.ai edge pool, and updates all logs."
             >
               <RefreshCw size={13} className={refreshing ? "animate-spin" : ""} />
               Refresh
-            </Button>
+            </TipButton>
             <ThemeToggle />
           </div>
         </header>
 
-        <div className="scroll-thin min-h-0 flex-1 overflow-y-auto px-6 pb-6">
+        {state?.management?.pythonInstalled && state.management.warpOwner === "python" && (
+          <div className="mx-6 mt-3">
+            <WarningBanner>
+              <strong>Opencode Unlimited is managing WARP/Tor.</strong> Tauri will not move the
+              shared tunnel while its keeper runs. Stop the Python keeper (or uninstall it) to
+              control WARP from here.
+            </WarningBanner>
+          </div>
+        )}
+        <div className="scroll-thin min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-6 pb-6">
           <Suspense fallback={<LoadingState label="Loading view…" />}>
             <Outlet />
           </Suspense>

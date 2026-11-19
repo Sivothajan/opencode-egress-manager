@@ -30,6 +30,18 @@ fn err_string(err: AppError) -> String {
     err.user_message()
 }
 
+/// Refuse to move the shared WARP tunnel / Tor daemon while the legacy Python
+/// keeper owns them. Returns the user-facing response to short-circuit with.
+fn python_owns_warp() -> Option<StatusResponse> {
+    if crate::config::python_keeper_running() {
+        Some(StatusResponse::fail(
+            "WARP/Tor is managed by Opencode Unlimited. Stop its keeper (or uninstall it) to control it from here.",
+        ))
+    } else {
+        None
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Response types
 // ---------------------------------------------------------------------------
@@ -121,6 +133,7 @@ pub struct LaneDto {
 pub struct StatsDto {
     pub hops: u64,
     pub blacklist_count: usize,
+    pub blacklist: Vec<String>,
     pub last_hop: i64,
     pub failed_hops: u32,
     pub backoff_until: i64,
@@ -169,6 +182,7 @@ pub struct AppStateDto {
     pub health: crate::services::diagnostics::HealthSummary,
     pub probe: ProbeState,
     pub settings: AppSettings,
+    pub management: ManagementStatus,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -181,6 +195,55 @@ pub struct EndpointLatency {
 pub struct LogsResponse {
     pub kind: String,
     pub lines: Vec<String>,
+}
+
+/// Which application currently owns the shared system resources.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ManagementStatus {
+    pub python_installed: bool,
+    pub python_keeper_running: bool,
+    pub python_guard_running: bool,
+    pub warp_owner: String,
+    pub service_owner: String,
+    pub firewall_owner: String,
+    pub shim_owner: String,
+}
+
+impl ManagementStatus {
+    /// Decide ownership from the live facts. Kept pure so it can be unit tested.
+    #[allow(clippy::too_many_arguments)]
+    pub fn detect(
+        python_installed: bool,
+        python_keeper_running: bool,
+        python_guard_running: bool,
+        python_service_wired: bool,
+        python_firewall_installed: bool,
+        tauri_service_wired: bool,
+        tauri_firewall_installed: bool,
+        tauri_keeper_running: bool,
+        tauri_path_first: bool,
+        python_path_first: bool,
+    ) -> Self {
+        let owner = |tauri: bool, python: bool| {
+            if python {
+                "python"
+            } else if tauri {
+                "tauri"
+            } else {
+                "none"
+            }
+        };
+        Self {
+            python_installed,
+            python_keeper_running,
+            python_guard_running,
+            warp_owner: owner(tauri_keeper_running, python_keeper_running).into(),
+            service_owner: owner(tauri_service_wired, python_service_wired).into(),
+            firewall_owner: owner(tauri_firewall_installed, python_firewall_installed).into(),
+            shim_owner: owner(tauri_path_first, python_path_first).into(),
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -258,6 +321,21 @@ pub async fn build_state(state: &AppState, force_egress: bool) -> AppResult<AppS
     let keeper_hb = crate::config::heartbeat_age(&paths.keeper_heartbeat());
     let guard_hb = crate::config::heartbeat_age(&paths.guard_heartbeat());
     let firewall_installed = firewall::is_installed().await;
+    let python_installed = crate::config::python_app_present();
+    let python_keeper_running = crate::config::python_keeper_running();
+    let python_guard_running = crate::config::python_guard_running();
+    let management = ManagementStatus::detect(
+        python_installed,
+        python_keeper_running,
+        python_guard_running,
+        opencode::service_config_status(crate::config::PYTHON_SERVICE_PROXY_PORT).wired,
+        firewall::is_python_installed().await,
+        service.wired,
+        firewall_installed,
+        platform::mutex_held("OpencodeEgressManagerKeeper"),
+        install::user_path_has_bin(),
+        install::python_path_first(),
+    );
     let autostart =
         scheduler::task_exists(TASK_KEEPER).await || scheduler::task_exists(TASK_GUARD).await;
 
@@ -340,6 +418,7 @@ pub async fn build_state(state: &AppState, force_egress: bool) -> AppResult<AppS
     let stats_dto = StatsDto {
         hops: guard_state.hops,
         blacklist_count: guard_state.blacklist.len(),
+        blacklist: guard_state.blacklist.clone(),
         last_hop: guard_state.last_hop,
         failed_hops: guard_state.failed_hops,
         backoff_until: guard_state.backoff_until,
@@ -384,6 +463,8 @@ pub async fn build_state(state: &AppState, force_egress: bool) -> AppResult<AppS
         proxy_listening: services_dto.proxy_listening,
         svc_wired: service.wired,
         path_wired: lane_dto.path_wired,
+        external_svc_wired: crate::config::python_app_present()
+            && opencode::service_config_status(crate::config::PYTHON_SERVICE_PROXY_PORT).wired,
         installed: lane_dto.shims_installed,
         probe_ok: probe.ok,
         probe_code: probe.code.clone(),
@@ -412,6 +493,7 @@ pub async fn build_state(state: &AppState, force_egress: bool) -> AppResult<AppS
         health,
         probe,
         settings,
+        management,
     })
 }
 
@@ -471,6 +553,11 @@ pub async fn set_egress_mode(
     custom_proxy: Option<String>,
     custom_type: Option<String>,
 ) -> Res<StatusResponse> {
+    if mode != "custom" {
+        if let Some(resp) = python_owns_warp() {
+            return Ok(resp);
+        }
+    }
     let paths = &state.paths;
     let chosen = EgressMode::parse(&mode).map_err(err_string)?;
     let current = EgressConfig::load(paths).map_err(err_string)?;
@@ -514,6 +601,9 @@ pub async fn set_egress_mode(
 
 #[tauri::command]
 pub async fn set_warp_scope(state: State<'_, AppState>, scope: String) -> Res<StatusResponse> {
+    if let Some(resp) = python_owns_warp() {
+        return Ok(resp);
+    }
     let clean = crate::config::WarpScope::parse(&scope).map_err(err_string)?;
     impl_set_scope(&state, clean).await
 }
@@ -546,6 +636,9 @@ async fn impl_set_scope(state: &AppState, clean: crate::config::WarpScope) -> Re
 
 #[tauri::command]
 pub async fn warp_connect(state: State<'_, AppState>) -> Res<StatusResponse> {
+    if let Some(resp) = python_owns_warp() {
+        return Ok(resp);
+    }
     impl_warp_connect(&state).await
 }
 
@@ -571,6 +664,9 @@ async fn impl_warp_connect(state: &AppState) -> Res<StatusResponse> {
 
 #[tauri::command]
 pub async fn warp_disconnect(state: State<'_, AppState>) -> Res<StatusResponse> {
+    if let Some(resp) = python_owns_warp() {
+        return Ok(resp);
+    }
     let bin = warp::find_warp_cli().ok_or_else(|| "warp-cli.exe not found".to_string())?;
     warp::disconnect(&bin).await.map_err(err_string)?;
     let mut ui = state.ui.lock().await;
@@ -581,6 +677,9 @@ pub async fn warp_disconnect(state: State<'_, AppState>) -> Res<StatusResponse> 
 
 #[tauri::command]
 pub async fn hop_now(state: State<'_, AppState>) -> Res<StatusResponse> {
+    if let Some(resp) = python_owns_warp() {
+        return Ok(resp);
+    }
     impl_hop_now(&state, true).await
 }
 
@@ -652,6 +751,9 @@ async fn impl_hop_now(state: &AppState, toast: bool) -> Res<StatusResponse> {
 
 #[tauri::command]
 pub async fn repair_warp_connection(state: State<'_, AppState>) -> Res<StatusResponse> {
+    if let Some(resp) = python_owns_warp() {
+        return Ok(resp);
+    }
     impl_repair_warp(&state).await
 }
 
@@ -680,6 +782,9 @@ async fn impl_repair_warp(state: &AppState) -> Res<StatusResponse> {
 
 #[tauri::command]
 pub async fn auto_heal_endpoint(state: State<'_, AppState>) -> Res<StatusResponse> {
+    if let Some(resp) = python_owns_warp() {
+        return Ok(resp);
+    }
     let bin = warp::find_warp_cli().ok_or_else(|| "warp-cli.exe not found".to_string())?;
     let msg = warp::auto_heal_endpoint(&bin, 900)
         .await
@@ -693,6 +798,9 @@ pub async fn set_clean_endpoint(
     state: State<'_, AppState>,
     endpoint: String,
 ) -> Res<StatusResponse> {
+    if let Some(resp) = python_owns_warp() {
+        return Ok(resp);
+    }
     let bin = warp::find_warp_cli().ok_or_else(|| "warp-cli.exe not found".to_string())?;
     warp::set_custom_endpoint(&bin, &endpoint)
         .await
@@ -705,6 +813,9 @@ pub async fn set_clean_endpoint(
 
 #[tauri::command]
 pub async fn reset_clean_endpoint(state: State<'_, AppState>) -> Res<StatusResponse> {
+    if let Some(resp) = python_owns_warp() {
+        return Ok(resp);
+    }
     let bin = warp::find_warp_cli().ok_or_else(|| "warp-cli.exe not found".to_string())?;
     warp::reset_custom_endpoint(&bin)
         .await
@@ -735,6 +846,9 @@ pub async fn test_clean_endpoints(timeout_ms: Option<u64>) -> Res<Vec<EndpointLa
 
 #[tauri::command]
 pub async fn toggle_tor_service(enable: bool) -> Res<StatusResponse> {
+    if let Some(resp) = python_owns_warp() {
+        return Ok(resp);
+    }
     let paths = Paths::discover();
     let msg = if enable {
         tor::start_portable_tor(&paths).await.map_err(err_string)?
@@ -746,6 +860,9 @@ pub async fn toggle_tor_service(enable: bool) -> Res<StatusResponse> {
 
 #[tauri::command]
 pub async fn rotate_tor_circuit() -> Res<StatusResponse> {
+    if let Some(resp) = python_owns_warp() {
+        return Ok(resp);
+    }
     let paths = Paths::discover();
     let msg = tor::rotate_circuit(&paths).await.map_err(err_string)?;
     Ok(StatusResponse::ok(msg))
@@ -989,6 +1106,9 @@ async fn impl_clear_blacklist(state: &AppState) -> Res<StatusResponse> {
 
 #[tauri::command]
 pub async fn deep_reset_identity(state: State<'_, AppState>) -> Res<StatusResponse> {
+    if let Some(resp) = python_owns_warp() {
+        return Ok(resp);
+    }
     impl_deep_reset(&state).await
 }
 
@@ -1428,5 +1548,40 @@ pub async fn run_repair_action(
     RepairActionResult {
         ok: result.ok,
         message: result.message,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ownership_prefers_python_when_it_is_running() {
+        let status = ManagementStatus::detect(
+            true, true, false, true, true, false, false, false, false, true,
+        );
+        assert_eq!(status.warp_owner, "python");
+        assert_eq!(status.service_owner, "python");
+        assert_eq!(status.firewall_owner, "python");
+        assert_eq!(status.shim_owner, "python");
+    }
+
+    #[test]
+    fn ownership_reports_tauri_and_none() {
+        let tauri = ManagementStatus::detect(
+            false, false, false, false, false, true, true, true, true, false,
+        );
+        assert_eq!(tauri.warp_owner, "tauri");
+        assert_eq!(tauri.service_owner, "tauri");
+        assert_eq!(tauri.firewall_owner, "tauri");
+        assert_eq!(tauri.shim_owner, "tauri");
+
+        let none = ManagementStatus::detect(
+            false, false, false, false, false, false, false, false, false, false,
+        );
+        assert_eq!(none.warp_owner, "none");
+        assert_eq!(none.service_owner, "none");
+        assert_eq!(none.firewall_owner, "none");
+        assert_eq!(none.shim_owner, "none");
     }
 }

@@ -23,7 +23,7 @@ export default function NetworkPage() {
 
   return (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-      <div className="xl:col-span-2">
+      <div className="min-w-0 xl:col-span-2">
         <Card
           title="Network interfaces"
           subtitle="IPv4 and IPv6 addresses reported by the Windows IpHelper API"
@@ -48,31 +48,29 @@ export default function NetworkPage() {
               detail="The network stack did not report any interfaces."
             />
           ) : (
-            <div className="overflow-x-auto scroll-thin">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>IPv4</TableHead>
-                    <TableHead>IPv6</TableHead>
-                    <TableHead>MAC</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {interfacesQuery.data.map((iface) => (
-                    <InterfaceRow key={`${iface.name}-${iface.mac}`} iface={iface} />
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>IPv4</TableHead>
+                  <TableHead>IPv6</TableHead>
+                  <TableHead>MAC</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {interfacesQuery.data.map((iface) => (
+                  <InterfaceRow key={`${iface.name}-${iface.mac}`} iface={iface} />
+                ))}
+              </TableBody>
+            </Table>
           )}
         </Card>
       </div>
 
       <PageContent query={stateQuery}>
         {(state) => (
-          <div className="flex flex-col gap-4">
+          <div className="min-w-0 flex flex-col gap-4">
             <Card title="Egress verification">
               <div className="flex items-center gap-2">
                 <Globe size={18} style={{ color: "var(--accent)" }} />
@@ -130,7 +128,7 @@ export default function NetworkPage() {
 function InterfaceRow({ iface }: { iface: NetworkInterfaceInfo }) {
   return (
     <TableRow>
-      <TableCell>
+      <TableCell className="whitespace-normal">
         <div>
           <p className="text-[13px] font-medium">{iface.name}</p>
           {iface.description && iface.description !== iface.name && (
@@ -143,8 +141,10 @@ function InterfaceRow({ iface }: { iface: NetworkInterfaceInfo }) {
       <TableCell>
         <Badge tone={iface.isUp ? "ok" : "neutral"}>{iface.isUp ? "up" : "down"}</Badge>
       </TableCell>
-      <TableCell className="mono text-xs">{iface.ipv4.join(", ") || "—"}</TableCell>
-      <TableCell className="mono text-xs">
+      <TableCell className="mono whitespace-normal text-xs">
+        {iface.ipv4.join(", ") || "—"}
+      </TableCell>
+      <TableCell className="mono whitespace-normal text-xs">
         {iface.ipv6.length > 2
           ? `${iface.ipv6.slice(0, 2).join(", ")} +${iface.ipv6.length - 2}`
           : iface.ipv6.join(", ") || "—"}
@@ -157,8 +157,8 @@ function InterfaceRow({ iface }: { iface: NetworkInterfaceInfo }) {
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-3">
-      <span>{label}</span>
-      <span className="mono text-right">{value}</span>
+      <span className="min-w-0 break-words">{label}</span>
+      <span className="mono min-w-0 break-all text-right">{value}</span>
     </div>
   );
 }

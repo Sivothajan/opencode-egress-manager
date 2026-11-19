@@ -9,7 +9,7 @@ import {
   XCircle,
   AlertTriangle,
 } from "lucide-react";
-import { Badge, Button, Card, KeyValue, Switch } from "@/components/ui";
+import { Badge, Card, HelpTip, KeyValue, Switch, TipButton } from "@/components/ui";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageContent } from "@/components/PageContent";
 import { useStateAction, useStateQuery } from "@/hooks/useAppState";
@@ -67,7 +67,7 @@ export default function DiagnosticsPage() {
               <ul className="flex flex-col gap-2">
                 {checks.map((check) => (
                   <li key={check.label} className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-2">
+                    <div className="flex min-w-0 items-start gap-2">
                       {check.tone === "ok" ? (
                         <CheckCircle2
                           size={15}
@@ -87,9 +87,9 @@ export default function DiagnosticsPage() {
                           style={{ color: "var(--danger)" }}
                         />
                       )}
-                      <div>
+                      <div className="min-w-0">
                         <p className="text-[13px] font-medium">{check.label}</p>
-                        <p className="text-xs" style={{ color: "var(--muted-text)" }}>
+                        <p className="break-words text-xs" style={{ color: "var(--muted-text)" }}>
                           {check.detail}
                         </p>
                       </div>
@@ -101,7 +101,15 @@ export default function DiagnosticsPage() {
             </Card>
 
             <Card
-              title="Auto-repair"
+              title={
+                <span className="flex items-center gap-1.5">
+                  Auto-repair
+                  <HelpTip
+                    title="Automatic Route Repair"
+                    body="Watches the proxy and tunnel. If OpenCode loses its route, it restarts the proxy, reconnects WARP, or changes edge automatically. It never changes your selected mode, clears chats, or restarts OpenCode."
+                  />
+                </span>
+              }
               subtitle={state.autoRepair.status}
               actions={
                 <Switch
@@ -126,30 +134,58 @@ export default function DiagnosticsPage() {
                     .slice()
                     .reverse()
                     .map((entry, index) => (
-                      <li key={`${entry.ts}-${index}`} className="flex items-center gap-2">
+                      <li key={`${entry.ts}-${index}`} className="flex min-w-0 items-center gap-2">
                         <Activity
                           size={12}
                           style={{ color: entry.ok ? "var(--ok)" : "var(--danger)" }}
                         />
-                        <span className="mono">{entry.action}</span>
-                        <span style={{ color: "var(--muted-text)" }}>{entry.message}</span>
+                        <span className="mono shrink-0">{entry.action}</span>
+                        <span
+                          className="min-w-0 break-words"
+                          style={{ color: "var(--muted-text)" }}
+                        >
+                          {entry.message}
+                        </span>
                       </li>
                     ))}
                 </ul>
               )}
               <div className="mt-3 flex flex-wrap gap-2">
-                <Button size="sm" variant="ghost" onClick={() => copyDiagnostics(state)}>
+                <TipButton
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => copyDiagnostics(state)}
+                  tipTitle="Copy Diagnostics Report"
+                  tipBody="Copies a full JSON diagnostic snapshot (redacted-free local status) to your clipboard for troubleshooting."
+                >
                   <ClipboardCopy size={13} />
                   Copy diagnostics
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => openLogsFolder()}>
+                </TipButton>
+                <TipButton
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => openLogsFolder()}
+                  tipTitle="Open Data & Logs Folder"
+                  tipBody="Opens %LOCALAPPDATA%\opencode-egress-manager in File Explorer so you can inspect logs and state directly."
+                >
                   <FolderOpen size={13} />
                   Logs folder
-                </Button>
+                </TipButton>
               </div>
             </Card>
 
-            <Card className="xl:col-span-3" title="Event logs">
+            <Card
+              className="xl:col-span-3"
+              title={
+                <span className="flex items-center gap-1.5">
+                  Event logs
+                  <HelpTip
+                    title="Worker & Route Logs"
+                    body="Guard log: wall detections, rotation attempts, blacklisted block skips, and completed /64 hops. Keeper log: WARP tunnel health, proxy startup, edge selection, and repairs. OpenCode log: live tail of opencode.log. Proxy: edge failover, dropped streams, fallbacks, and repairs."
+                  />
+                </span>
+              }
+            >
               <Tabs value={logTab} onValueChange={setLogTab}>
                 <TabsList variant="line">
                   {LOG_TABS.map((tab) => (
@@ -161,12 +197,18 @@ export default function DiagnosticsPage() {
                 {LOG_TABS.map((tab) => (
                   <TabsContent key={tab.id} value={tab.id}>
                     <div className="mb-2 flex justify-end">
-                      <Button size="sm" variant="ghost" onClick={() => logQuery.refetch()}>
+                      <TipButton
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => logQuery.refetch()}
+                        tipTitle="Live Log Tail"
+                        tipBody="Live tail of the selected worker log. Use Reload to fetch the latest lines."
+                      >
                         {logQuery.isFetching ? (
                           <Loader2 size={13} className="animate-spin" />
                         ) : null}
                         Reload
-                      </Button>
+                      </TipButton>
                     </div>
                     <pre className="log-box scroll-thin">
                       {logQuery.data?.lines.join("\n") || "No log output yet."}
@@ -230,7 +272,7 @@ function buildChecks(state: AppState): Array<{ label: string; detail: string; to
   checks.push({
     label: "Firewall kill-switch",
     detail: state.services.firewallInstalled
-      ? "OUC_LEAKGUARD_CLI installed"
+      ? "Firewall kill-switch installed"
       : "not installed (optional)",
     tone: state.services.firewallInstalled ? "ok" : "warn",
   });

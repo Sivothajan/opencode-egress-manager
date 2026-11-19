@@ -12,7 +12,7 @@ flowchart TD
     end
 
     subgraph Workers["Detached workers, same executable"]
-        KEEPER["keeper: CONNECT proxy :41987, WARP keepalive"]
+        KEEPER["keeper: CONNECT proxy :41988, WARP keepalive"]
         GUARD["guard: quota wall detection, rotation, resume"]
     end
 

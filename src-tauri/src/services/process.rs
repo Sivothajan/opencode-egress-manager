@@ -31,26 +31,15 @@ pub async fn stop_worker_processes(role: &str) -> (u32, String) {
         if pid.as_u32() == std::process::id() {
             continue;
         }
-        let name = process.name().to_string_lossy().to_ascii_lowercase();
-        if !name.ends_with(".exe") || name.contains("egress-manager-admin") {
-            // Legacy python workers are still matched by command line below.
-        }
-        let exe = process
-            .exe()
-            .map(|p| p.to_string_lossy().to_ascii_lowercase())
-            .unwrap_or_default();
         let cmdline = process
             .cmd()
             .iter()
             .map(|s| s.to_string_lossy().to_ascii_lowercase())
             .collect::<Vec<_>>()
             .join(" ");
-        let matches_new = cmdline.contains(&format!("--worker {role}"));
-        let matches_legacy = match role {
-            "keeper" => exe.contains("python") && cmdline.contains("warp_keeper.py"),
-            _ => exe.contains("python") && cmdline.contains("zen_guard.py"),
-        };
-        if matches_new || matches_legacy {
+        // Only ever stop this application's own workers. The legacy Python app
+        // owns its keeper/guard processes and must not be touched.
+        if cmdline.contains(&format!("--worker {role}")) {
             targets.push(pid.as_u32());
         }
     }

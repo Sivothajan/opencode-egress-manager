@@ -85,7 +85,7 @@ fn allowed_roots() -> Vec<PathBuf> {
     roots
 }
 
-pub async fn is_installed() -> bool {
+async fn rule_exists(name: &str) -> bool {
     match run_hidden(
         "netsh",
         &[
@@ -93,15 +93,24 @@ pub async fn is_installed() -> bool {
             "firewall".into(),
             "show".into(),
             "rule".into(),
-            format!("name={FIREWALL_RULE_NAME}"),
+            format!("name={name}"),
         ],
         6,
     )
     .await
     {
-        Ok((code, out)) => code == 0 && out.contains(FIREWALL_RULE_NAME),
+        Ok((code, out)) => code == 0 && out.contains(name),
         Err(_) => false,
     }
+}
+
+pub async fn is_installed() -> bool {
+    rule_exists(FIREWALL_RULE_NAME).await
+}
+
+/// True when the legacy Python app's kill-switch rule is present.
+pub async fn is_python_installed() -> bool {
+    rule_exists("OUC_LEAKGUARD_CLI").await
 }
 
 pub async fn install(cli_path: &str) -> Result<String> {

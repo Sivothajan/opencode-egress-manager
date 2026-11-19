@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { EyeOff, Loader2, RefreshCw, Play, Square } from "lucide-react";
-import { Badge, Button, Card, KeyValue } from "@/components/ui";
+import { Badge, Card, HelpTip, KeyValue, TipButton } from "@/components/ui";
 import { PageContent } from "@/components/PageContent";
 import { useStateAction, useStateQuery } from "@/hooks/useAppState";
 import { readLogs, rotateTorCircuit, toggleTorService } from "@/services/api";
@@ -19,7 +19,18 @@ export default function TorPage() {
     <PageContent query={query}>
       {(state) => (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-          <Card title="Tor network" subtitle="Isolated circuit routing for OpenCode traffic">
+          <Card
+            title={
+              <span className="flex items-center gap-1.5">
+                Tor network
+                <HelpTip
+                  title="Tor Network Mode"
+                  body="Routes opencode.ai traffic through Tor SOCKS5 (port 9050/9150). Uses Tor exit nodes in regions where WARP is blocked (Russia, Iran, etc.)."
+                />
+              </span>
+            }
+            subtitle="Isolated circuit routing for OpenCode traffic"
+          >
             <div className="flex items-center gap-2">
               <Badge tone={state.egress.torActive ? "ok" : "warn"}>
                 {state.egress.torActive ? "active" : "not running"}
@@ -36,31 +47,37 @@ export default function TorPage() {
               <KeyValue label="Tor Browser hook" value="9150" />
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
-              <Button
+              <TipButton
                 size="sm"
                 disabled={action.isPending}
                 onClick={() => action.mutate(() => toggleTorService(true))}
+                tipTitle="Start / Stop Built-in Tor"
+                tipBody="Starts or stops the headless Tor background daemon."
               >
                 <Play size={13} />
                 Start Tor
-              </Button>
-              <Button
+              </TipButton>
+              <TipButton
                 size="sm"
                 variant="ghost"
                 disabled={action.isPending}
                 onClick={() => action.mutate(() => toggleTorService(false))}
+                tipTitle="Start / Stop Built-in Tor"
+                tipBody="Starts or stops the headless Tor background daemon."
               >
                 <Square size={13} />
                 Stop
-              </Button>
-              <Button
+              </TipButton>
+              <TipButton
                 size="sm"
                 disabled={action.isPending}
                 onClick={() => action.mutate(rotateTorCircuit)}
+                tipTitle="Rotate Tor Circuit"
+                tipBody="Sends NEWNYM signal to Tor control port to immediately get a brand-new exit node IP for OpenCode."
               >
                 <RefreshCw size={13} />
                 New circuit
-              </Button>
+              </TipButton>
             </div>
           </Card>
 

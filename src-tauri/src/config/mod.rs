@@ -14,14 +14,16 @@ use serde::{Deserialize, Serialize};
 use crate::errors::{AppError, Result};
 
 pub const BRAND: &str = "opencode-egress-manager";
-pub const SERVICE_PROXY_PORT_DEFAULT: u16 = 41987;
+pub const SERVICE_PROXY_PORT_DEFAULT: u16 = 41988;
+/// Proxy port owned by the legacy Python "Opencode Unlimited" app.
+pub const PYTHON_SERVICE_PROXY_PORT: u16 = 41987;
 pub const WARP_ISOLATED_SOCKS_PORT: u16 = 40000;
 pub const TOR_SOCKS_PORT: u16 = 9050;
 pub const TOR_BROWSER_SOCKS_PORT: u16 = 9150;
 pub const TOR_CONTROL_PORT: u16 = 9051;
 pub const TASK_KEEPER: &str = "OpencodeEgressManager-Keeper";
 pub const TASK_GUARD: &str = "OpencodeEgressManager-Guard";
-pub const FIREWALL_RULE_NAME: &str = "OUC_LEAKGUARD_CLI";
+pub const FIREWALL_RULE_NAME: &str = "OUC_LEAKGUARD_CLI_EGRESS";
 
 fn local_appdata() -> PathBuf {
     if let Ok(v) = std::env::var("LOCALAPPDATA") {
@@ -31,6 +33,30 @@ fn local_appdata() -> PathBuf {
     }
     let home = std::env::var("USERPROFILE").unwrap_or_else(|_| ".".into());
     PathBuf::from(home).join("AppData").join("Local")
+}
+
+/// True when the legacy Python "Opencode Unlimited" app is installed.
+///
+/// Its data root, proxy port, firewall rule, shims, and workers overlap this
+/// app's. When it is present this app yields those shared resources so the
+/// Python install keeps working.
+pub fn python_app_present() -> bool {
+    local_appdata().join("opencode-unlimited").is_dir()
+}
+
+/// Bin directory of the legacy Python app (its `opencode.cmd` shim).
+pub fn python_bin_dir() -> PathBuf {
+    local_appdata().join("opencode-unlimited").join("bin")
+}
+
+/// True while the legacy Python keeper owns the shared WARP tunnel / Tor daemon.
+pub fn python_keeper_running() -> bool {
+    crate::platform::mutex_held("OpencodeUnlimitedKeeper")
+}
+
+/// True while the legacy Python guard owns quota-wall rotation.
+pub fn python_guard_running() -> bool {
+    crate::platform::mutex_held("OpencodeUnlimitedGuard")
 }
 
 /// Per-user application directory layout.

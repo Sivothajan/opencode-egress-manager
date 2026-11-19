@@ -56,6 +56,7 @@ export interface LaneState {
 export interface StatsState {
   hops: number;
   blacklistCount: number;
+  blacklist: string[];
   lastHop: number;
   failedHops: number;
   backoffUntil: number;
@@ -152,6 +153,16 @@ export interface AppSettings {
   theme: "system" | "light" | "dark" | string;
 }
 
+export interface ManagementStatus {
+  pythonInstalled: boolean;
+  pythonKeeperRunning: boolean;
+  pythonGuardRunning: boolean;
+  warpOwner: "tauri" | "python" | "none" | string;
+  serviceOwner: "tauri" | "python" | "none" | string;
+  firewallOwner: "tauri" | "python" | "none" | string;
+  shimOwner: "tauri" | "python" | "none" | string;
+}
+
 export interface AppState {
   platform: PlatformInfo;
   warp: WarpState;
@@ -165,6 +176,7 @@ export interface AppState {
   health: HealthSummary;
   probe: ProbeState;
   settings: AppSettings;
+  management: ManagementStatus;
 }
 
 export interface StatusResponse {

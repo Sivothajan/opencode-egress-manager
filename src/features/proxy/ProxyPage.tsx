@@ -1,7 +1,16 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Ban, RefreshCw, ShieldAlert } from "lucide-react";
-import { Badge, Button, Card, EmptyState, Input, KeyValue, ToggleRow } from "@/components/ui";
+import {
+  Badge,
+  Card,
+  EmptyState,
+  HelpTip,
+  Input,
+  KeyValue,
+  TipButton,
+  ToggleRow,
+} from "@/components/ui";
 import {
   Table,
   TableBody,
@@ -16,11 +25,13 @@ import {
   clearBlacklist,
   readLogs,
   rerollEdge,
+  rotateCustomProxy,
   setEdgeOverride,
+  setEgressMode,
   toggleDesktopServiceProxy,
   toggleStrictMode,
 } from "@/services/api";
-import { edgeOverrideSchema, validate } from "@/lib/validation";
+import { edgeOverrideSchema, proxyPoolSchema, validate } from "@/lib/validation";
 import { formatAgo } from "@/lib/format";
 
 export default function ProxyPage() {
@@ -28,6 +39,8 @@ export default function ProxyPage() {
   const action = useStateAction();
   const [override, setOverride] = useState("auto");
   const [overrideError, setOverrideError] = useState<string | null>(null);
+  const [pool, setPool] = useState("");
+  const [poolError, setPoolError] = useState<string | null>(null);
 
   const logsQuery = useQuery({
     queryKey: ["logs", "proxy"],
@@ -47,11 +60,34 @@ export default function ProxyPage() {
     },
   });
 
+  const applyPool = useMutation({
+    mutationFn: async (value: string) => {
+      const result = validate(proxyPoolSchema, value);
+      if (!result.success) {
+        setPoolError(result.error);
+        throw new Error(result.error);
+      }
+      setPoolError(null);
+      return setEgressMode("custom", value.trim());
+    },
+  });
+
   return (
     <PageContent query={query}>
       {(state) => (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-          <Card title="Local HTTP/CONNECT proxy" subtitle="Bound to loopback only">
+          <Card
+            title={
+              <span className="flex items-center gap-1.5">
+                Local HTTP/CONNECT proxy
+                <HelpTip
+                  title="WARP Keeper (Background Watchdog + Desktop Proxy)"
+                  body="Runs silently every 45s to keep WARP connected in the selected scope, repair dead tunnels, and host the Desktop/service proxy on 127.0.0.1:41988."
+                />
+              </span>
+            }
+            subtitle="Bound to loopback only"
+          >
             <div className="flex items-center gap-2">
               <Badge tone={state.services.proxyListening ? "ok" : "bad"}>
                 {state.services.proxyListening ? "listening" : "down"}
@@ -66,19 +102,43 @@ export default function ProxyPage() {
             </div>
           </Card>
 
-          <Card title="Cloudflare edge">
+          <Card
+            title={
+              <span className="flex items-center gap-1.5">
+                Cloudflare edge
+                <HelpTip
+                  title="Pinned Cloudflare Edge (AAAA)"
+                  body="opencode.ai resolves to multiple Cloudflare IPv6 edge nodes. Pinning an AAAA edge makes new connections use that node; re-roll anytime or pin a specific node."
+                />
+              </span>
+            }
+          >
             <KeyValue label="Pinned edge" value={state.lane.pinnedEdge || "auto"} />
             <KeyValue label="Override" value={state.lane.edgeOverride} />
             <KeyValue label="Last bad edge" value={state.proxy.lastBadEdge ?? "—"} />
+            {state.stats.blacklist.length > 0 && (
+              <div className="mt-3">
+                <p className="text-xs font-medium">Blacklisted /64s</p>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {state.stats.blacklist.map((prefix) => (
+                    <Badge key={prefix} tone="neutral">
+                      {prefix}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="mt-3 flex flex-wrap gap-2">
-              <Button
+              <TipButton
                 size="sm"
                 disabled={action.isPending}
                 onClick={() => action.mutate(rerollEdge)}
+                tipTitle="Re-roll Cloudflare Edge"
+                tipBody="Switches the active Desktop proxy (127.0.0.1:41988) to a different random opencode.ai IPv6 edge immediately without restarting OpenCode."
               >
                 <RefreshCw size={13} />
                 Re-roll
-              </Button>
+              </TipButton>
             </div>
             <div className="mt-3 flex gap-2">
               <Input
@@ -87,13 +147,15 @@ export default function ProxyPage() {
                 placeholder="auto or IPv6"
                 aria-label="Edge override"
               />
-              <Button
+              <TipButton
                 size="sm"
                 disabled={applyOverride.isPending}
                 onClick={() => applyOverride.mutate(override)}
+                tipTitle="Edge Selection Mode"
+                tipBody="Choose 'Auto-Random' to rotate automatically per session/hop, or pin a specific IPv6 AAAA edge from the live DNS pool."
               >
                 Pin edge
-              </Button>
+              </TipButton>
             </div>
             {overrideError && (
               <p className="mt-2 text-xs" style={{ color: "var(--danger)" }}>
@@ -102,7 +164,68 @@ export default function ProxyPage() {
             )}
           </Card>
 
-          <Card title="Behavior">
+          <Card
+            title={
+              <span className="flex items-center gap-1.5">
+                Custom proxy pool
+                <HelpTip
+                  title="Custom Proxy Mode"
+                  body="Route through your own SOCKS5 or HTTP proxy (e.g. Clash, V2Ray, Xray, SingBox, Shadowsocks on 127.0.0.1:10808 or remote)."
+                />
+              </span>
+            }
+            subtitle="SOCKS5/HTTP nodes tried in order"
+          >
+            <div className="flex flex-wrap gap-2">
+              <Input
+                value={pool}
+                onChange={(event) => setPool(event.target.value)}
+                placeholder="127.0.0.1:10808 (or multiple: 1.1.1.1:1080, 2.2.2.2:1080)"
+                aria-label="Custom proxy pool"
+                className="min-w-0 flex-1"
+              />
+              <TipButton
+                size="sm"
+                disabled={applyPool.isPending}
+                onClick={() => applyPool.mutate(pool)}
+                tipTitle="Apply Custom Proxy Pool"
+                tipBody="Saves the pool and switches the active egress to custom proxy mode."
+              >
+                Apply pool
+              </TipButton>
+              <TipButton
+                size="sm"
+                variant="ghost"
+                disabled={action.isPending}
+                onClick={() => action.mutate(rotateCustomProxy)}
+                tipTitle="Cycle Next Proxy Node"
+                tipBody="Immediately switch to the next proxy node in your multi-proxy pool."
+              >
+                Next Node
+              </TipButton>
+            </div>
+            {poolError && (
+              <p className="mt-2 text-xs" style={{ color: "var(--danger)" }}>
+                {poolError}
+              </p>
+            )}
+            <div className="mt-3">
+              <KeyValue label="Configured nodes" value={state.egress.customPoolCount} />
+              <KeyValue label="Current node" value={state.egress.customCurrentNode || "—"} />
+            </div>
+          </Card>
+
+          <Card
+            title={
+              <span className="flex items-center gap-1.5">
+                Behavior
+                <HelpTip
+                  title="Strict Fail-Closed Mode"
+                  body="When ON, the proxy refuses connections if WARP is down. When OFF (Recommended), it falls back to a direct connection instead of returning a 503 error."
+                />
+              </span>
+            }
+          >
             <div className="flex flex-col gap-3">
               <ToggleRow
                 title="Strict fail-closed mode"
@@ -119,15 +242,17 @@ export default function ProxyPage() {
                 onChange={(value) => action.mutate(() => toggleDesktopServiceProxy(value))}
               />
               <div className="flex flex-wrap gap-2 pt-1">
-                <Button
+                <TipButton
                   size="sm"
                   variant="danger"
                   disabled={action.isPending}
                   onClick={() => action.mutate(clearBlacklist)}
+                  tipTitle="Clear /64 Blacklist"
+                  tipBody="Clears the saved burned /64 list so those prefixes can be tried again after a quota reset."
                 >
                   <Ban size={13} />
                   Clear blacklist ({state.stats.blacklistCount})
-                </Button>
+                </TipButton>
               </div>
             </div>
           </Card>
@@ -151,48 +276,54 @@ export default function ProxyPage() {
                 detail="Events appear as soon as traffic flows through the proxy."
               />
             ) : (
-              <div className="overflow-x-auto scroll-thin">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Time</TableHead>
-                      <TableHead>Kind</TableHead>
-                      <TableHead>Detail</TableHead>
-                      <TableHead>Host</TableHead>
-                      <TableHead>Edge</TableHead>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Time</TableHead>
+                    <TableHead>Kind</TableHead>
+                    <TableHead>Detail</TableHead>
+                    <TableHead>Host</TableHead>
+                    <TableHead>Edge</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {[...state.proxy.recent].reverse().map((event, index) => (
+                    <TableRow key={`${event.ts}-${index}`}>
+                      <TableCell>{formatAgo(event.ts)}</TableCell>
+                      <TableCell>
+                        <Badge
+                          tone={
+                            event.kind.startsWith("edge") || event.kind === "error"
+                              ? "bad"
+                              : event.kind === "fallback"
+                                ? "warn"
+                                : "info"
+                          }
+                        >
+                          {event.kind}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="whitespace-normal text-xs">{event.detail}</TableCell>
+                      <TableCell className="mono text-xs">{event.host || "—"}</TableCell>
+                      <TableCell className="mono text-xs">{event.edge || "—"}</TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {[...state.proxy.recent].reverse().map((event, index) => (
-                      <TableRow key={`${event.ts}-${index}`}>
-                        <TableCell>{formatAgo(event.ts)}</TableCell>
-                        <TableCell>
-                          <Badge
-                            tone={
-                              event.kind.startsWith("edge") || event.kind === "error"
-                                ? "bad"
-                                : event.kind === "fallback"
-                                  ? "warn"
-                                  : "info"
-                            }
-                          >
-                            {event.kind}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-xs">{event.detail}</TableCell>
-                        <TableCell className="mono text-xs">{event.host || "—"}</TableCell>
-                        <TableCell className="mono text-xs">{event.edge || "—"}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                  ))}
+                </TableBody>
+              </Table>
             )}
           </Card>
 
           <Card
             className="xl:col-span-3"
-            title="Proxy log"
+            title={
+              <span className="flex items-center gap-1.5">
+                Proxy log
+                <HelpTip
+                  title="Proxy Route Log"
+                  body="Connection events from the local proxy: edge failover, dropped streams, direct fallbacks, and tunnel repairs."
+                />
+              </span>
+            }
             actions={
               <button className="btn btn-sm" onClick={() => logsQuery.refetch()}>
                 Reload
