@@ -15,6 +15,7 @@ const EDGE_FAILURE_COOLDOWN: Duration = Duration::from_secs(120);
 const CACHE_TTL: Duration = Duration::from_millis(1500);
 const STREAM_RESET_WINDOW: Duration = Duration::from_secs(300);
 
+/// Tracks the active Cloudflare edge, the candidate pool, and failure cooldowns.
 pub struct EdgeState {
     inner: Mutex<Inner>,
 }
@@ -31,6 +32,7 @@ struct Inner {
 }
 
 impl EdgeState {
+    /// Create edge state from a candidate pool and the initially selected edge.
     pub fn new(pool: Vec<String>, initial_edge: String) -> Self {
         Self {
             inner: Mutex::new(Inner {
@@ -46,6 +48,7 @@ impl EdgeState {
         }
     }
 
+    /// Return the currently selected edge address.
     pub async fn current_edge(&self) -> String {
         self.inner.lock().await.edge.clone()
     }
@@ -88,26 +91,24 @@ impl EdgeState {
         }
     }
 
-    fn pick_locked(inner: &mut Inner, exclude: &str) -> String {
+    fn pick_locked(inner: &Inner, exclude: &str) -> String {
         let now = Instant::now();
-        let bad: Vec<String> = inner
-            .bad_edges
-            .iter()
-            .filter(|(_, at)| now.duration_since(**at) < EDGE_FAILURE_COOLDOWN)
-            .map(|(edge, _)| edge.clone())
-            .collect();
-        let choices: Vec<String> = inner
+        let is_bad = |edge: &str| {
+            inner
+                .bad_edges
+                .iter()
+                .any(|(bad, at)| bad == edge && now.duration_since(*at) < EDGE_FAILURE_COOLDOWN)
+        };
+        let choices: Vec<&String> = inner
             .pool
             .iter()
-            .filter(|e| e.as_str() != exclude && !bad.contains(e))
-            .cloned()
+            .filter(|e| e.as_str() != exclude && !is_bad(e))
             .collect();
         let candidates = if choices.is_empty() {
             inner
                 .pool
                 .iter()
                 .filter(|e| e.as_str() != exclude)
-                .cloned()
                 .collect::<Vec<_>>()
         } else {
             choices
@@ -123,22 +124,22 @@ impl EdgeState {
     pub async fn edges_to_try(&self) -> Vec<String> {
         let inner = self.inner.lock().await;
         let now = Instant::now();
-        let bad: Vec<String> = inner
-            .bad_edges
-            .iter()
-            .filter(|(_, at)| now.duration_since(**at) < EDGE_FAILURE_COOLDOWN)
-            .map(|(edge, _)| edge.clone())
-            .collect();
+        let is_bad = |edge: &str| {
+            inner
+                .bad_edges
+                .iter()
+                .any(|(bad, at)| bad == edge && now.duration_since(*at) < EDGE_FAILURE_COOLDOWN)
+        };
         let primary = inner.edge.clone();
         let mut healthy: Vec<String> = inner
             .pool
             .iter()
-            .filter(|e| **e != primary && !bad.contains(e))
+            .filter(|e| **e != primary && !is_bad(e))
             .cloned()
             .collect();
         let mut choices = if primary.is_empty() {
             healthy
-        } else if bad.contains(&primary) && !healthy.is_empty() {
+        } else if is_bad(&primary) && !healthy.is_empty() {
             std::mem::take(&mut healthy)
         } else {
             let mut c = vec![primary.clone()];
@@ -160,6 +161,7 @@ impl EdgeState {
         choices
     }
 
+    /// Record a successful connection, adopting `edge` as current when it differs.
     pub async fn mark_ok(&self, edge: &str, paths: &Paths) {
         let mut inner = self.inner.lock().await;
         inner.bad_edges.remove(edge);
@@ -169,11 +171,12 @@ impl EdgeState {
         }
     }
 
+    /// Record a failed connection, picking a replacement if the current edge failed.
     pub async fn mark_failed(&self, edge: &str, paths: &Paths) {
         let mut inner = self.inner.lock().await;
         inner.bad_edges.insert(edge.to_string(), Instant::now());
         if edge == inner.edge {
-            inner.edge = Self::pick_locked(&mut inner, edge);
+            inner.edge = Self::pick_locked(&inner, edge);
             let _ =
                 crate::config::write_text(&paths.last_edge_file(), &(inner.edge.clone() + "\n"));
         }
@@ -202,7 +205,7 @@ impl EdgeState {
         if stamps.len() < 2 || edge != inner.edge {
             return None;
         }
-        let replacement = Self::pick_locked(&mut inner, edge);
+        let replacement = Self::pick_locked(&inner, edge);
         if replacement.is_empty() || replacement == edge {
             return None;
         }
@@ -211,6 +214,7 @@ impl EdgeState {
         Some(replacement)
     }
 
+    /// Force the next [`EdgeState::get`] to refresh the cached IPv6 and pool.
     pub async fn invalidate(&self) {
         let mut inner = self.inner.lock().await;
         inner.fetched_at = Instant::now() - CACHE_TTL - Duration::from_secs(1);
@@ -321,6 +325,7 @@ impl<T: Clone> ChooseRandom<T> for Vec<T> {
     }
 }
 
+/// Timeout applied to each pinned edge connect attempt.
 pub fn edge_connect_timeout() -> Duration {
     EDGE_CONNECT_TIMEOUT
 }
@@ -342,7 +347,7 @@ mod tests {
             cached_v6: None,
         };
         inner.bad_edges.insert("a".into(), Instant::now());
-        let picked = EdgeState::pick_locked(&mut inner, "a");
+        let picked = EdgeState::pick_locked(&inner, "a");
         assert_ne!(picked, "a");
         assert!(inner.pool.contains(&picked));
     }

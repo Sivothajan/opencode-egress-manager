@@ -124,6 +124,10 @@ fn write_user_path(value: &str, kind: REG_VALUE_TYPE) -> Result<()> {
     Ok(())
 }
 
+/// Add or remove the app's `bin` directory on the user `PATH`.
+///
+/// Returns true when the environment was changed. When the legacy Python bin is
+/// present it is kept ahead of this app's entry.
 pub fn update_user_path(add: bool) -> Result<bool> {
     let bin_dir = Paths::discover().bin_dir;
     let target = bin_dir.to_string_lossy().trim_end_matches('\\').to_string();
@@ -185,6 +189,7 @@ pub fn python_path_first() -> bool {
         .unwrap_or(false)
 }
 
+/// True when the app's `bin` directory is already on the user `PATH`.
 pub fn user_path_has_bin() -> bool {
     let bin_dir = Paths::discover().bin_dir;
     let target = bin_dir
@@ -257,6 +262,7 @@ fn write_cmd_wrapper(path: &Path, content: &str) -> Result<()> {
     Ok(())
 }
 
+/// Open a terminal running the local `opencode` CLI through the pinned lane.
 pub async fn launch_cli(paths: &Paths) -> Result<String> {
     let shim = paths.bin_dir.join("opencode.cmd");
     if !shim.is_file() {
@@ -286,6 +292,7 @@ pub async fn launch_cli(paths: &Paths) -> Result<String> {
     Ok("Opened OpenCode CLI terminal via the local lane.".into())
 }
 
+/// Launch OpenCode Desktop, clearing client lockouts and ensuring the proxy is up.
 pub async fn launch_desktop(paths: &Paths) -> Result<String> {
     let desktop = opencode::find_opencode_desktop()
         .ok_or_else(|| AppError::not_found("OpenCode Desktop executable not found"))?;

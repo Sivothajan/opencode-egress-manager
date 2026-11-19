@@ -16,6 +16,7 @@ use crate::errors::{AppError, Result};
 
 const ERROR_ALREADY_EXISTS: u32 = 183;
 
+/// Encode a string as a nul-terminated UTF-16 buffer for Win32 APIs.
 pub fn wide(value: &str) -> Vec<u16> {
     OsStr::new(value)
         .encode_wide()
@@ -26,16 +27,21 @@ pub fn wide(value: &str) -> Vec<u16> {
 /// Windows 10/11 version information.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WindowsVersion {
+    /// Major version number (currently 10).
     pub major: u32,
+    /// Minor version number.
     pub minor: u32,
+    /// Build number (for example 22631).
     pub build: u32,
 }
 
 impl WindowsVersion {
+    /// True on Windows 10 build 10240 or newer.
     pub fn is_win10_or_newer(&self) -> bool {
         self.major > 10 || (self.major == 10 && self.build >= 10240)
     }
 
+    /// True on Windows 11 (build 22000 or newer).
     pub fn is_win11(&self) -> bool {
         self.major > 10 || (self.major == 10 && self.build >= 22000)
     }
@@ -87,6 +93,7 @@ pub fn windows_version() -> WindowsVersion {
     }
 }
 
+/// True when the current process holds an elevated (administrator) token.
 pub fn is_admin() -> bool {
     unsafe { IsUserAnAdmin().as_bool() }
 }
@@ -111,6 +118,7 @@ pub fn acquire_mutex(name: &str) -> bool {
     }
 }
 
+/// True when some live process currently owns the named mutex.
 pub fn mutex_held(name: &str) -> bool {
     let full = format!("Local\\{name}");
     let wide_name = wide(&full);
@@ -142,6 +150,9 @@ impl Drop for MutexGuard {
     }
 }
 
+/// Acquire a named mutex, keeping it owned until the returned guard drops.
+///
+/// Returns `None` when another instance already owns it.
 pub fn lock_mutex(name: &str) -> Option<MutexGuard> {
     let full = format!("Local\\{name}");
     let wide_name = wide(&full);
@@ -155,6 +166,7 @@ pub fn lock_mutex(name: &str) -> Option<MutexGuard> {
     }
 }
 
+/// Find a top-level window by its exact title, if one exists.
 pub fn find_window_by_title(title: &str) -> Option<HWND> {
     let wide_title = wide(title);
     unsafe {
@@ -167,6 +179,7 @@ pub fn find_window_by_title(title: &str) -> Option<HWND> {
     }
 }
 
+/// Restore a minimized window and bring it to the foreground.
 pub fn restore_and_focus(hwnd: HWND) {
     unsafe {
         let _ = ShowWindow(hwnd, SW_RESTORE);
@@ -204,6 +217,7 @@ pub fn native_hwnd(window: &tauri::WebviewWindow) -> Option<HWND> {
     }
 }
 
+/// Absolute path of the running executable.
 pub fn current_exe() -> PathBuf {
     std::env::current_exe().unwrap_or_else(|_| PathBuf::from("opencode-egress-manager.exe"))
 }

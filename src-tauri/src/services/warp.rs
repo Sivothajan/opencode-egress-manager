@@ -18,6 +18,7 @@ use crate::{
     services::networking::{self, run_hidden},
 };
 
+/// Cloudflare endpoints known to accept a WARP tunnel and provide a clean egress.
 pub const KNOWN_CLEAN_ENDPOINTS: &[&str] = &[
     "162.159.192.1:2408",
     "162.159.192.2:2408",
@@ -71,6 +72,7 @@ fn warp_candidates() -> Vec<PathBuf> {
     out
 }
 
+/// Locate the `warp-cli.exe` binary in standard install locations and `PATH`.
 pub fn find_warp_cli() -> Option<PathBuf> {
     warp_candidates().into_iter().find(|p| p.is_file())
 }
@@ -95,10 +97,14 @@ pub async fn run(bin: &Path, args: &[&str], timeout_secs: u64) -> Result<(i32, S
     run_warp_async(bin, args, timeout_secs).await
 }
 
+/// Parsed WARP status reported by `warp-cli status`.
 #[derive(Debug, Clone)]
 pub struct WarpStatus {
+    /// Whether the tunnel reports `Connected`.
     pub connected: bool,
+    /// Operation mode such as `warp`, `proxy`, or `dns_only`.
     pub mode: String,
+    /// Human-readable status text, including any disconnect reason.
     pub status_text: String,
 }
 
@@ -190,6 +196,7 @@ pub async fn warp_status(bin: &Path, force: bool) -> WarpStatus {
     }
 }
 
+/// Query WARP's current operation mode, preferring JSON over the text output.
 pub async fn warp_mode(bin: &Path) -> String {
     let (code, out) = run_warp_async(bin, &["-j", "settings", "list"], 6)
         .await
@@ -238,6 +245,7 @@ pub async fn warp_mode(bin: &Path) -> String {
     String::new()
 }
 
+/// Query the tunnel protocol currently in use (`wireguard` or `masque`).
 pub async fn warp_protocol(bin: &Path) -> String {
     let (code, out) = run_warp_async(bin, &["-j", "settings"], 5)
         .await
@@ -274,6 +282,7 @@ pub async fn warp_protocol(bin: &Path) -> String {
     String::new()
 }
 
+/// Set the tunnel protocol when WARP is not already using `desired`.
 pub async fn ensure_warp_protocol(bin: &Path, desired: &str) -> bool {
     let want = desired.to_ascii_lowercase();
     if want != "wireguard" && want != "masque" {
@@ -293,6 +302,7 @@ pub async fn ensure_warp_protocol(bin: &Path, desired: &str) -> bool {
     )
 }
 
+/// Select the WARP operation mode matching `scope` (TUN or isolated SOCKS).
 pub async fn ensure_warp_mode(bin: &Path, scope: WarpScope) -> bool {
     let desired = if scope == WarpScope::Isolated {
         "proxy"
@@ -316,6 +326,7 @@ pub async fn ensure_warp_mode(bin: &Path, scope: WarpScope) -> bool {
     )
 }
 
+/// Check whether WARP has a usable registration.
 pub async fn registration_healthy(bin: &Path) -> bool {
     matches!(
         run_warp_async(bin, &["registration", "show"], 8).await,
@@ -323,6 +334,7 @@ pub async fn registration_healthy(bin: &Path) -> bool {
     )
 }
 
+/// Recreate a missing or stale WARP registration, retrying a few times.
 pub async fn repair_registration(bin: &Path, max_tries: u32) -> bool {
     if registration_healthy(bin).await {
         return true;
@@ -345,6 +357,7 @@ pub async fn repair_registration(bin: &Path, max_tries: u32) -> bool {
     false
 }
 
+/// Apply the protocol/mode and connect WARP, polling until the tunnel is up.
 pub async fn connect(bin: &Path, scope: WarpScope) -> bool {
     ensure_warp_mode(bin, scope).await;
     ensure_warp_protocol(bin, "wireguard").await;
@@ -359,12 +372,13 @@ pub async fn connect(bin: &Path, scope: WarpScope) -> bool {
     false
 }
 
+/// Disconnect WARP and tear down the tunnel.
 pub async fn disconnect(bin: &Path) -> Result<()> {
     run_warp_async(bin, &["disconnect"], 10).await?;
     Ok(())
 }
 
-async fn wait_connected(bin: &Path, attempts: u32) -> bool {
+pub(crate) async fn wait_connected(bin: &Path, attempts: u32) -> bool {
     for _ in 0..attempts {
         sleep(Duration::from_secs(1)).await;
         if warp_status(bin, true).await.connected {
@@ -379,6 +393,29 @@ fn registration_missing(raw: &str) -> bool {
     ["registration missing", "not registered", "no registration"]
         .iter()
         .any(|marker| low.contains(marker))
+}
+
+/// Renew the tunnel keys and reconnect once after a failed connect.
+async fn rotate_keys_and_connect(bin: &Path, scope: WarpScope) -> bool {
+    let _ = run_warp_async(bin, &["tunnel", "rotate-keys"], 15).await;
+    connect(bin, scope).await
+}
+
+/// UI-facing full activation shared by the Connect and Repair actions.
+///
+/// Applies the selected protocol/scope, repairs a broken registration, connects,
+/// and falls back to a key rotation when the tunnel does not come up.
+pub async fn activate(bin: &Path, paths: &Paths) -> bool {
+    let cfg = EgressConfig::load(paths).unwrap_or_default();
+    let _ = ensure_warp_protocol(bin, "wireguard").await;
+    if !registration_healthy(bin).await {
+        let _ = repair_registration(bin, 3).await;
+    }
+    let _ = ensure_warp_mode(bin, cfg.warp_scope).await;
+    if connect(bin, cfg.warp_scope).await {
+        return true;
+    }
+    rotate_keys_and_connect(bin, cfg.warp_scope).await
 }
 
 /// Keep the tunnel connected without resetting a healthy session.
@@ -430,8 +467,7 @@ pub async fn ensure_connected(bin: &Path, paths: &Paths) -> bool {
         "tunnel disconnected - renewing keys and reconnecting",
         1_048_576,
     );
-    let _ = run_warp_async(bin, &["tunnel", "rotate-keys"], 15).await;
-    if connect(bin, scope).await {
+    if rotate_keys_and_connect(bin, scope).await {
         return true;
     }
     let raw = warp_status(bin, true).await.status_text;
@@ -529,6 +565,7 @@ fn split_endpoint(endpoint: &str) -> Option<(String, u16)> {
     Some((host.to_string(), port))
 }
 
+/// Point WARP at a specific clean endpoint and reconnect.
 pub async fn set_custom_endpoint(bin: &Path, endpoint: &str) -> Result<()> {
     validate_endpoint(endpoint)?;
     ensure_warp_protocol(bin, "wireguard").await;
@@ -552,6 +589,7 @@ pub async fn set_custom_endpoint(bin: &Path, endpoint: &str) -> Result<()> {
     )))
 }
 
+/// Restore WARP's default endpoint and reconnect.
 pub async fn reset_custom_endpoint(bin: &Path) -> Result<()> {
     let (code, msg) = run_warp_async(bin, &["tunnel", "endpoint", "reset"], 15).await?;
     if code != 0 {
@@ -571,6 +609,7 @@ pub async fn reset_custom_endpoint(bin: &Path) -> Result<()> {
     ))
 }
 
+/// Pick the fastest known clean endpoint and apply it to WARP.
 pub async fn auto_heal_endpoint(bin: &Path, timeout_ms: u64) -> Result<String> {
     let mut best: Option<(f64, String)> = None;
     for endpoint in KNOWN_CLEAN_ENDPOINTS {
@@ -608,21 +647,33 @@ fn validate_endpoint(endpoint: &str) -> Result<()> {
     Ok(())
 }
 
+/// Snapshot of the egress configuration and live route state.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EgressState {
+    /// Selected egress mode.
     pub mode: String,
+    /// WARP scope (`tun` or `isolated`).
     pub warp_scope: String,
+    /// Raw custom proxy pool string.
     pub custom_proxy: String,
+    /// Proxy type applied to pool entries that omit a scheme.
     pub custom_type: String,
+    /// Whether a live Tor SOCKS service was found.
     pub tor_active: bool,
+    /// `host:port` of the Tor SOCKS service, or `Not running`.
     pub tor_target: String,
+    /// Whether our portable Tor process is alive.
     pub tor_running: bool,
+    /// Number of nodes in the custom proxy pool.
     pub custom_pool_count: usize,
+    /// `host:port` of the currently selected custom node.
     pub custom_current_node: String,
+    /// Known clean endpoints exposed to the UI.
     pub clean_endpoints: Vec<String>,
 }
 
+/// Build an [`EgressState`] snapshot from the current config and services.
 pub async fn egress_state(paths: &Paths) -> EgressState {
     let cfg = EgressConfig::load(paths).unwrap_or_default();
     let tor = crate::services::tor::status_for(paths).await;

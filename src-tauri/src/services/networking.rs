@@ -57,19 +57,27 @@ const FALLBACK_OPENCODE_AAAA: &[&str] = &[
     "2606:4700:e0::ac40:9002",
 ];
 
+/// A physical or virtual network adapter reported by Win32 IP helpers.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NetworkInterface {
+    /// Adapter name (for example `Ethernet`).
     pub name: String,
+    /// Human-readable adapter description.
     #[serde(default)]
     pub description: String,
+    /// MAC address, when the adapter has one.
     #[serde(default)]
     pub mac: String,
+    /// IPv4 addresses currently assigned.
     #[serde(default)]
     pub ipv4: Vec<String>,
+    /// IPv6 addresses currently assigned.
     #[serde(default)]
     pub ipv6: Vec<String>,
+    /// True when the adapter is administratively up.
     pub is_up: bool,
+    /// True for the loopback adapter.
     #[serde(default)]
     pub is_loopback: bool,
 }
@@ -280,7 +288,7 @@ pub async fn probe_public_ip(proxy_url: Option<&str>, timeout_secs: u64) -> Opti
     let mut builder = reqwest::Client::builder()
         .no_proxy()
         .timeout(Duration::from_secs(timeout_secs))
-        .user_agent("opencode-egress-manager/3.0");
+        .user_agent(crate::config::USER_AGENT);
     if let Some(url) = proxy_url {
         // reqwest only understands socks5://; remote DNS resolution is a property
         // of the proxy server, so the wire format is identical.

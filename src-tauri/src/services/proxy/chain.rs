@@ -8,14 +8,20 @@ use crate::{
     services::networking,
 };
 
+/// One parsed proxy node from the custom pool.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ProxySpec {
+    /// Proxy hostname or IP address.
     pub host: String,
+    /// Proxy port.
     pub port: u16,
+    /// Protocol used to reach the proxy.
     #[serde(rename = "type")]
     pub proxy_type: ProxyType,
+    /// Optional username for proxy authentication.
     #[serde(default)]
     pub username: String,
+    /// Optional password for proxy authentication.
     #[serde(default)]
     pub password: String,
 }
@@ -36,6 +42,7 @@ impl ProxySpec {
         }
     }
 
+    /// Render the node as `host:port` for display and logs.
     pub fn describe(&self) -> String {
         format!("{}:{}", self.host, self.port)
     }
@@ -143,6 +150,7 @@ pub fn parse_proxy_entry(raw: &str, default_type: ProxyType) -> Option<ProxySpec
     })
 }
 
+/// Parse a proxy type string, rejecting unknown values.
 pub fn parse_proxy_type(value: &str) -> Result<ProxyType> {
     ProxyType::parse(value)
 }
@@ -184,6 +192,7 @@ fn index_file(paths: &Paths) -> std::path::PathBuf {
     paths.lane_dir.join("custom_proxy_index.txt")
 }
 
+/// Read the persisted custom-pool index, wrapped into `total`.
 pub fn proxy_index_from_paths(paths: &Paths, total: usize) -> usize {
     let path = index_file(paths);
     let idx: i64 = std::fs::read_to_string(&path)
@@ -197,10 +206,12 @@ pub fn proxy_index_from_paths(paths: &Paths, total: usize) -> usize {
     }
 }
 
+/// Persist the selected custom-pool index.
 pub fn write_proxy_index(paths: &Paths, idx: usize) -> Result<()> {
     crate::config::write_text(&index_file(paths), &idx.to_string())
 }
 
+/// Return the custom-pool node selected by the persisted index.
 pub fn get_current_proxy_spec(
     paths: &Paths,
     cfg: &crate::config::EgressConfig,
@@ -282,6 +293,7 @@ pub fn advance_custom_proxy(paths: &Paths) -> Result<ProxySpec> {
     Ok(specs[new_idx.min(specs.len().saturating_sub(1))].clone())
 }
 
+/// Open a CONNECT tunnel through an upstream HTTP proxy.
 pub async fn open_http_proxy_tunnel(
     dest_host: &str,
     dest_port: u16,
@@ -461,6 +473,7 @@ where
     }
 }
 
+/// Whether fail-closed strict mode is enabled via env var or flag file.
 pub fn strict_mode(paths: &Paths) -> bool {
     std::env::var("OUC_STRICT_PROXY").ok().as_deref() == Some("1") || paths.strict_flag().is_file()
 }

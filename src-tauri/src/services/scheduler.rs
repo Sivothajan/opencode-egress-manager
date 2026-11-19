@@ -57,6 +57,7 @@ fn validate_name(name: &str) -> Result<()> {
     Ok(())
 }
 
+/// True when a scheduled task with this name is registered.
 pub async fn task_exists(name: &str) -> bool {
     validate_name(name).ok();
     matches!(
@@ -136,6 +137,7 @@ async fn create_task(name: &str, exe: &str, args: &str) -> Result<()> {
     }
 }
 
+/// Delete a scheduled task, ignoring an already-absent task.
 pub async fn delete_task(name: &str) -> Result<()> {
     validate_name(name)?;
     let (code, out) = run_hidden(
@@ -155,6 +157,7 @@ pub async fn delete_task(name: &str) -> Result<()> {
     Err(AppError::Process(out.trim().to_string()))
 }
 
+/// Enable a registered scheduled task.
 pub async fn enable_task(name: &str) -> Result<()> {
     validate_name(name)?;
     let (code, out) = run_hidden(
@@ -175,6 +178,7 @@ pub async fn enable_task(name: &str) -> Result<()> {
     }
 }
 
+/// Disable a registered scheduled task without deleting it.
 pub async fn disable_task(name: &str) -> Result<()> {
     validate_name(name)?;
     let (code, out) = run_hidden(
@@ -195,6 +199,7 @@ pub async fn disable_task(name: &str) -> Result<()> {
     }
 }
 
+/// Trigger a scheduled task to run immediately.
 pub async fn run_task(name: &str) -> Result<()> {
     validate_name(name)?;
     let (code, out) = run_hidden(
@@ -218,6 +223,7 @@ pub async fn register_autostart(app_exe: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Remove both keeper and guard autostart tasks.
 pub async fn clear_autostart() -> Result<()> {
     let _ = delete_task(TASK_KEEPER).await;
     let _ = delete_task(TASK_GUARD).await;

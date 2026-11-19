@@ -2,51 +2,86 @@
 
 use serde::Serialize;
 
+/// One actionable problem surfaced by the health analysis.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct HealthIssue {
+    /// Severity bucket used for ordering and styling: `ok`, `warn`, or `bad`.
     pub level: String,
+    /// Short, user-facing headline describing the problem.
     pub title: String,
+    /// Longer explanation of what is wrong and what the user can do.
     pub detail: String,
+    /// One-click fix action identifier, when a repair is available.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fix: Option<String>,
+    /// Label for the fix button; empty when there is no fix.
     pub fix_label: String,
 }
 
+/// Overall connection health shown on the dashboard.
 #[derive(Debug, Clone, Serialize)]
 pub struct HealthSummary {
+    /// Aggregate status: `ok`, `warn`, `bad`, or `busy`.
     pub status: String,
+    /// Headline describing the current state.
     pub title: String,
+    /// Supporting sentence shown under the headline.
     pub sub: String,
+    /// Problems in diagnostic-phase order: setup, route, worker, proxy, rotation.
     pub issues: Vec<HealthIssue>,
 }
 
+/// Live state snapshot fed into the health analysis.
 #[derive(Debug, Clone, Default)]
 pub struct HealthInput {
+    /// Whether Cloudflare WARP is installed on this machine.
     pub warp_installed: bool,
+    /// Whether WARP currently reports a connected tunnel.
     pub warp_connected: bool,
+    /// Whether a route rotation is currently in progress.
     pub rotating: bool,
+    /// Selected egress mode (`warp`, `clean`, `tor`, or `custom`).
     pub mode: String,
+    /// Whether Tor is reachable as an egress route.
     pub egress_tor_active: bool,
+    /// Whether the WARP Keeper background worker is running.
     pub keeper_running: bool,
+    /// Whether the Zen Guard auto-rotation worker is running.
     pub guard_running: bool,
+    /// Whether the local proxy is listening.
     pub proxy_listening: bool,
+    /// Whether the background service is wired into OpenCode.
     pub svc_wired: bool,
+    /// Whether OpenCode's PATH-level hook is wired up.
     pub path_wired: bool,
     /// OpenCode is already routed through the legacy Python app's proxy.
     pub external_svc_wired: bool,
+    /// Whether the background service has been installed.
     pub installed: bool,
+    /// Last real connectivity probe result, if one has completed.
     pub probe_ok: Option<bool>,
+    /// Probe outcome code, e.g. `ok`, `upstream`, `timeout`, or `offline`.
     pub probe_code: String,
+    /// Unix timestamp until which auto-rotation is backed off.
     pub guard_backoff: i64,
+    /// Unix timestamp until which the free-limit pause is enforced.
     pub guard_free_wall: i64,
+    /// Seconds since Keeper last checked in, if known.
     pub keeper_heartbeat: Option<f64>,
+    /// Seconds since Zen Guard last checked in, if known.
     pub guard_heartbeat: Option<f64>,
+    /// Whether the desktop app is installed.
     pub desktop_installed: bool,
+    /// Whether the CLI is installed.
     pub cli_installed: bool,
+    /// Number of live response streams cut in the last five minutes.
     pub stream_resets_5m: usize,
+    /// Whether the proxy is currently on the direct fallback route.
     pub fallback_active: bool,
+    /// Seconds since the fallback route was engaged, if known.
     pub fallback_age: Option<i64>,
+    /// A recent network error sample recorded from the proxy.
     pub net_error_sample: Option<String>,
 }
 
@@ -56,18 +91,28 @@ const HEARTBEAT_STALE_SECS: f64 = 240.0;
 pub fn build_health(input: &HealthInput) -> HealthSummary {
     let mut issues: Vec<HealthIssue> = Vec::new();
     let now = chrono::Utc::now().timestamp();
+    check_setup(input, &mut issues);
+    check_route(input, &mut issues);
+    check_worker_liveness(input, &mut issues);
+    check_proxy(input, &mut issues);
+    check_rotation(input, &mut issues, now);
+    summarize(input, &issues)
+}
 
-    let add =
-        |level: &str, title: &str, detail: &str, fix: Option<&str>, label: &str| HealthIssue {
-            level: level.to_string(),
-            title: title.to_string(),
-            detail: detail.to_string(),
-            fix: fix.map(|s| s.to_string()),
-            fix_label: label.to_string(),
-        };
+fn issue(level: &str, title: &str, detail: &str, fix: Option<&str>, label: &str) -> HealthIssue {
+    HealthIssue {
+        level: level.to_string(),
+        title: title.to_string(),
+        detail: detail.to_string(),
+        fix: fix.map(|s| s.to_string()),
+        fix_label: label.to_string(),
+    }
+}
 
+/// Setup, wiring, background-worker, and heartbeat problems.
+fn check_setup(input: &HealthInput, issues: &mut Vec<HealthIssue>) {
     if !input.installed {
-        issues.push(add(
+        issues.push(issue(
             "warn",
             "Setup isn't finished",
             "The background service isn't installed yet, so OpenCode isn't protected or auto-rotated.",
@@ -81,7 +126,7 @@ pub fn build_health(input: &HealthInput) -> HealthSummary {
         && !input.path_wired
         && !input.external_svc_wired
     {
-        issues.push(add(
+        issues.push(issue(
             "warn",
             "OpenCode isn't using Opencode Egress Manager",
             "OpenCode is installed but connecting directly, so it will hit the free limit and nothing will rotate. Press Connect, then reopen OpenCode.",
@@ -90,7 +135,7 @@ pub fn build_health(input: &HealthInput) -> HealthSummary {
         ));
     }
     if (input.svc_wired || input.path_wired) && !input.proxy_listening {
-        issues.push(add(
+        issues.push(issue(
             "bad",
             "OpenCode can't connect right now",
             &format!(
@@ -101,7 +146,7 @@ pub fn build_health(input: &HealthInput) -> HealthSummary {
             "Start it",
         ));
     } else if input.installed && !input.keeper_running {
-        issues.push(add(
+        issues.push(issue(
             "warn",
             "Background protection is off",
             "WARP Keeper isn't running. This window is covering for it, but OpenCode will lose its connection when you close the app.",
@@ -111,7 +156,7 @@ pub fn build_health(input: &HealthInput) -> HealthSummary {
     }
     if let Some(age) = input.keeper_heartbeat {
         if age > HEARTBEAT_STALE_SECS {
-            issues.push(add(
+            issues.push(issue(
                 "bad",
                 "Background protection stopped responding",
                 &format!(
@@ -125,7 +170,7 @@ pub fn build_health(input: &HealthInput) -> HealthSummary {
     }
     if let Some(age) = input.guard_heartbeat {
         if age > HEARTBEAT_STALE_SECS {
-            issues.push(add(
+            issues.push(issue(
                 "warn",
                 "Auto-rotation stopped responding",
                 &format!(
@@ -137,10 +182,13 @@ pub fn build_health(input: &HealthInput) -> HealthSummary {
             ));
         }
     }
+}
 
+/// Availability of the selected egress route.
+fn check_route(input: &HealthInput, issues: &mut Vec<HealthIssue>) {
     if input.mode == "warp" || input.mode == "clean" {
         if !input.warp_installed {
-            issues.push(add(
+            issues.push(issue(
                 "bad",
                 "Cloudflare WARP isn't installed",
                 "WARP mode needs the free Cloudflare WARP app (1.1.1.1).",
@@ -148,7 +196,7 @@ pub fn build_health(input: &HealthInput) -> HealthSummary {
                 "Download WARP",
             ));
         } else if !input.warp_connected && !input.rotating {
-            issues.push(add(
+            issues.push(issue(
                 "bad",
                 "WARP is disconnected",
                 "Traffic can't go through Cloudflare right now.",
@@ -157,7 +205,7 @@ pub fn build_health(input: &HealthInput) -> HealthSummary {
             ));
         }
     } else if input.mode == "tor" && !input.egress_tor_active {
-        issues.push(add(
+        issues.push(issue(
             "bad",
             "Tor isn't running",
             "Tor mode is selected but no Tor proxy is reachable.",
@@ -165,9 +213,12 @@ pub fn build_health(input: &HealthInput) -> HealthSummary {
             "Start Tor",
         ));
     }
+}
 
+/// Whether the background quota guard is running at all.
+fn check_worker_liveness(input: &HealthInput, issues: &mut Vec<HealthIssue>) {
     if input.installed && !input.guard_running {
-        issues.push(add(
+        issues.push(issue(
             "warn",
             "Auto-rotation is off",
             "Zen Guard isn't running, so when you hit the free limit you'll have to rotate manually.",
@@ -175,7 +226,10 @@ pub fn build_health(input: &HealthInput) -> HealthSummary {
             "Turn on",
         ));
     }
+}
 
+/// Proxy fallback, probe, stream-reset, and logged network-error problems.
+fn check_proxy(input: &HealthInput, issues: &mut Vec<HealthIssue>) {
     if input.proxy_listening && input.fallback_active {
         let route = match input.mode.as_str() {
             "warp" => "Cloudflare WARP",
@@ -197,7 +251,7 @@ pub fn build_health(input: &HealthInput) -> HealthSummary {
         } else {
             "repair_warp"
         };
-        issues.push(add(
+        issues.push(issue(
             "warn",
             "Using a direct connection",
             &format!(
@@ -215,7 +269,7 @@ pub fn build_health(input: &HealthInput) -> HealthSummary {
         )
     {
         if input.probe_code == "offline" {
-            issues.push(add(
+            issues.push(issue(
                 "bad",
                 "This PC has no internet",
                 "Neither the direct connection nor the local proxy could reach the internet. Check Wi-Fi or the network cable, then press Refresh.",
@@ -240,7 +294,7 @@ pub fn build_health(input: &HealthInput) -> HealthSummary {
             } else {
                 "repair_warp"
             };
-            issues.push(add(
+            issues.push(issue(
                 "bad",
                 "OpenCode can't get through the local proxy",
                 &format!(
@@ -267,7 +321,7 @@ pub fn build_health(input: &HealthInput) -> HealthSummary {
         } else {
             "Rotate route"
         };
-        issues.push(add(
+        issues.push(issue(
             "warn",
             "Response streams keep dropping",
             &format!(
@@ -302,7 +356,7 @@ pub fn build_health(input: &HealthInput) -> HealthSummary {
             } else {
                 "Repair"
             };
-            issues.push(add(
+            issues.push(issue(
                 "bad",
                 "OpenCode hit a network error",
                 &format!(
@@ -313,12 +367,15 @@ pub fn build_health(input: &HealthInput) -> HealthSummary {
             ));
         }
     }
+}
 
+/// Rotation pauses that the user should know about.
+fn check_rotation(input: &HealthInput, issues: &mut Vec<HealthIssue>, now: i64) {
     if input.guard_free_wall > now {
         let reset = chrono::DateTime::from_timestamp(input.guard_free_wall, 0)
             .map(|d| d.format("%H:%M").to_string())
             .unwrap_or_else(|| "00:00".into());
-        issues.push(add(
+        issues.push(issue(
             "warn",
             "The free limit is not following the IP",
             &format!(
@@ -329,7 +386,7 @@ pub fn build_health(input: &HealthInput) -> HealthSummary {
         ));
     } else if input.guard_backoff > now {
         let mins = ((input.guard_backoff - now) / 60).max(1);
-        issues.push(add(
+        issues.push(issue(
             "warn",
             "Auto-rotation is taking a break",
             &format!(
@@ -340,7 +397,10 @@ pub fn build_health(input: &HealthInput) -> HealthSummary {
             "Try now",
         ));
     }
+}
 
+/// Collapse the collected issues into the dashboard summary.
+fn summarize(input: &HealthInput, issues: &[HealthIssue]) -> HealthSummary {
     let bad = issues.iter().any(|i| i.level == "bad");
     let wired = input.svc_wired || input.path_wired || input.external_svc_wired;
     let (status, title, sub) = if input.rotating {
@@ -386,12 +446,11 @@ pub fn build_health(input: &HealthInput) -> HealthSummary {
             },
         )
     };
-    let _ = now;
     HealthSummary {
         status: status.to_string(),
         title: title.to_string(),
         sub,
-        issues,
+        issues: issues.to_vec(),
     }
 }
 
@@ -502,5 +561,52 @@ mod tests {
     fn known_fix_actions_are_allowed() {
         assert!(fix_action_id("start_keeper"));
         assert!(!fix_action_id("shutdown_pc"));
+    }
+
+    #[test]
+    fn issues_keep_their_diagnostic_order() {
+        let mut input = base();
+        // Trigger one issue from each phase: setup, route, worker, proxy, rotation.
+        input.keeper_running = false;
+        input.warp_installed = false;
+        input.guard_running = false;
+        input.fallback_active = true;
+        input.guard_backoff = chrono::Utc::now().timestamp() + 600;
+
+        let summary = build_health(&input);
+        let titles: Vec<&str> = summary.issues.iter().map(|i| i.title.as_str()).collect();
+        assert_eq!(
+            titles,
+            vec![
+                "Background protection is off",
+                "Cloudflare WARP isn't installed",
+                "Auto-rotation is off",
+                "Using a direct connection",
+                "Auto-rotation is taking a break",
+            ]
+        );
+    }
+
+    #[test]
+    fn rotating_status_beats_a_bad_issue() {
+        let mut input = base();
+        input.proxy_listening = false; // bad issue
+        input.rotating = true;
+        assert_eq!(build_health(&input).status, "busy");
+    }
+
+    #[test]
+    fn bad_issues_outrank_warnings() {
+        let mut input = base();
+        input.keeper_running = false; // warning
+        input.proxy_listening = false; // bad
+        assert_eq!(build_health(&input).status, "bad");
+    }
+
+    #[test]
+    fn pending_probe_is_reported_as_warn() {
+        let mut input = base();
+        input.probe_ok = None;
+        assert_eq!(build_health(&input).status, "warn");
     }
 }

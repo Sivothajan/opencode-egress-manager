@@ -4,12 +4,16 @@
 //! UI closing because Scheduled Tasks launch them at logon. IPC is file/heartbeat/
 //! mutex based, exactly like the audited design, so no privileged channel is added.
 
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::path::Path;
+use std::time::{Duration, SystemTime};
 
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    config::{EgressConfig, GuardState, Paths, SERVICE_PROXY_PORT_DEFAULT},
+    config::{
+        now_epoch, EgressConfig, GuardState, Paths, MUTEX_GUARD, MUTEX_KEEPER, PYTHON_MUTEX_GUARD,
+        PYTHON_MUTEX_KEEPER, SERVICE_PROXY_PORT_DEFAULT,
+    },
     errors::{redact, Result},
     platform,
     services::{networking, opencode, proxy, tor, warp},
@@ -44,19 +48,12 @@ pub async fn run_role(role: &str) -> i32 {
     code
 }
 
-fn now_epoch() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
-}
-
 // ---------------------------------------------------------------------------
 // Keeper
 // ---------------------------------------------------------------------------
 
 async fn keeper_main(paths: &Paths) -> i32 {
-    let Some(_mutex) = platform::lock_mutex("OpencodeEgressManagerKeeper") else {
+    let Some(_mutex) = platform::lock_mutex(MUTEX_KEEPER) else {
         return 0;
     };
     let cancel = CancellationToken::new();
@@ -140,7 +137,7 @@ async fn keeper_main(paths: &Paths) -> i32 {
                 // The legacy Python keeper owns the shared WARP tunnel and Tor
                 // daemon while it runs; in that case this keeper only hosts the
                 // proxy and leaves WARP/Tor management to it.
-                if !platform::mutex_held("OpencodeUnlimitedKeeper") {
+                if !platform::mutex_held(PYTHON_MUTEX_KEEPER) {
                     let cfg = EgressConfig::load(paths).unwrap_or_default();
                     match cfg.mode {
                         crate::config::EgressMode::Warp | crate::config::EgressMode::Clean => {
@@ -206,7 +203,7 @@ async fn maintain_tor(paths: &Paths) {
 async fn guard_main(paths: &Paths) -> i32 {
     // Two quota-wall guards would both rotate WARP and churn the tunnel. If the
     // legacy Python guard is running, stand down and let it own rotation.
-    if platform::mutex_held("OpencodeUnlimitedGuard") {
+    if platform::mutex_held(PYTHON_MUTEX_GUARD) {
         crate::config::append_log(
             &paths.guard_log_file(),
             "Opencode Unlimited guard is running - standing down",
@@ -214,7 +211,7 @@ async fn guard_main(paths: &Paths) -> i32 {
         );
         return 0;
     }
-    let Some(_mutex) = platform::lock_mutex("OpencodeEgressManagerGuard") else {
+    let Some(_mutex) = platform::lock_mutex(MUTEX_GUARD) else {
         return 0;
     };
     let cancel = CancellationToken::new();
@@ -294,23 +291,48 @@ fn session_id_in(line: &str) -> String {
 }
 
 /// Read newly appended log bytes and detect quota walls.
-fn read_new_bytes(state: &mut GuardState, paths: &Paths) -> (bool, Vec<String>) {
-    let path = Paths::opencode_log();
-    let Ok(meta) = std::fs::metadata(&path) else {
+fn read_new_bytes(state: &mut GuardState, paths: &Paths, log_path: &Path) -> (bool, Vec<String>) {
+    let Ok(meta) = std::fs::metadata(log_path) else {
         return (false, Vec::new());
     };
     let size = meta.len();
-    let mut offset = state.offset;
-    if size < offset {
-        offset = 0;
+    // A persisted offset larger than the file means the log was truncated or
+    // rotated under us. Rewinding would replay old quota errors as fresh walls
+    // (and rotate WARP for a limit hit hours ago), so resync to the current end.
+    if size < state.offset {
+        crate::config::append_log(
+            &paths.guard_log_file(),
+            &format!(
+                "OpenCode log was truncated or rotated (offset {} > size {}); skipped history",
+                state.offset, size
+            ),
+            1_048_576,
+        );
+        state.offset = size;
+        let _ = state.save(paths);
+        return (false, Vec::new());
     }
-    let start = offset.max(size.saturating_sub(MAX_READ_BYTES as u64));
-    let delta = size - start;
+    let delta = size - state.offset;
     if delta == 0 {
         return (false, Vec::new());
     }
+    // The guard may have been offline while OpenCode accumulated a large backlog.
+    // Replaying it would re-detect old walls; skip ahead instead.
+    if delta > MAX_READ_BYTES as u64 {
+        crate::config::append_log(
+            &paths.guard_log_file(),
+            &format!(
+                "skipped {delta} bytes of OpenCode log backlog; resuming from the current end"
+            ),
+            1_048_576,
+        );
+        state.offset = size;
+        let _ = state.save(paths);
+        return (false, Vec::new());
+    }
+    let start = state.offset;
     use std::io::{Read, Seek, SeekFrom};
-    let Ok(mut fh) = std::fs::File::open(&path) else {
+    let Ok(mut fh) = std::fs::File::open(log_path) else {
         return (false, Vec::new());
     };
     if fh.seek(SeekFrom::Start(start)).is_err() {
@@ -438,7 +460,7 @@ fn note_wall(state: &mut GuardState, paths: &Paths, now: i64) -> bool {
 async fn guard_tick(paths: &Paths, state: &mut GuardState) -> Result<()> {
     // Fail-safe against a check/use race: if the legacy Python guard appears
     // after startup, stop rotating rather than fight it for WARP.
-    if platform::mutex_held("OpencodeUnlimitedGuard") {
+    if platform::mutex_held(PYTHON_MUTEX_GUARD) {
         return Ok(());
     }
     let now = now_epoch();
@@ -448,7 +470,7 @@ async fn guard_tick(paths: &Paths, state: &mut GuardState) -> Result<()> {
         return Ok(());
     }
 
-    let (wall, sessions) = read_new_bytes(state, paths);
+    let (wall, sessions) = read_new_bytes(state, paths, &Paths::opencode_log());
     if !wall && !state.wall_pending {
         return Ok(());
     }
@@ -511,181 +533,196 @@ async fn guard_tick(paths: &Paths, state: &mut GuardState) -> Result<()> {
     Ok(())
 }
 
+/// Rotate the active egress after a confirmed quota wall.
 async fn rotate(paths: &Paths, state: &mut GuardState) -> Result<bool> {
     let now = now_epoch();
     let cfg = EgressConfig::load(paths)?;
     match cfg.mode {
-        crate::config::EgressMode::Tor => {
-            crate::config::append_log(
-                &paths.guard_log_file(),
-                "wall detected in Tor mode - rotating circuit",
-                1_048_576,
-            );
-            let msg = tor::rotate_circuit(paths).await?;
-            state.last_hop = now;
-            state.hops += 1;
-            if !msg.is_empty() {
-                state.last_ok_hop = now;
-            }
-            let _ = state.save(paths);
-            crate::config::append_log(
-                &paths.guard_log_file(),
-                &format!("Tor rotated: {msg}"),
-                1_048_576,
-            );
-            if !msg.is_empty() {
-                dispatch_auto_resume(paths, state, None).await?;
-                return Ok(true);
-            }
-            Ok(false)
-        }
-        crate::config::EgressMode::Custom => {
-            crate::config::append_log(
-                &paths.guard_log_file(),
-                "wall detected in Custom Proxy mode - cycling node",
-                1_048_576,
-            );
-            let (ok, msg) = proxy::chain::rotate_custom_proxy(paths).await?;
-            state.last_hop = now;
-            state.hops += 1;
-            if ok {
-                state.last_ok_hop = now;
-            }
-            let _ = state.save(paths);
-            crate::config::append_log(
-                &paths.guard_log_file(),
-                &format!("custom rotated: {msg}"),
-                1_048_576,
-            );
-            if ok {
-                dispatch_auto_resume(paths, state, None).await?;
-            }
-            Ok(ok)
-        }
+        crate::config::EgressMode::Tor => rotate_tor(paths, state, now).await,
+        crate::config::EgressMode::Custom => rotate_custom(paths, state, now).await,
         crate::config::EgressMode::Warp | crate::config::EgressMode::Clean => {
-            let Some(bin) = warp::find_warp_cli() else {
-                crate::config::append_log(
-                    &paths.guard_log_file(),
-                    "wall detected but warp-cli is not installed",
-                    1_048_576,
-                );
-                return Ok(false);
-            };
-            let old_v6 = networking::get_egress_ip(&cfg, 8)
-                .await
-                .or_else(networking::warp_local_v6)
-                .unwrap_or_else(|| state.current.clone());
-            let old_display = if old_v6.is_empty() {
-                "?".to_string()
-            } else {
-                old_v6.clone()
-            };
-            let old_prefix = networking::normalize_v6_64(&old_v6);
-            crate::config::append_log(
-                &paths.guard_log_file(),
-                &format!("wall detected - rotating WARP /64 (was: {old_display})"),
-                1_048_576,
-            );
-            state.blacklist_prefix(&old_v6);
-            let _ = state.save(paths);
+            rotate_warp(paths, state, now, &cfg).await
+        }
+    }
+}
 
-            let avoid = state.blacklist.clone();
-            let mut new_v6 = String::new();
-            {
-                let pause = crate::config::PauseGuard::acquire(paths, "zen-guard", 600);
-                for attempt in 1..=MAX_HOP_TRIES {
-                    let candidate = warp::hop_once(&bin, paths, 3, &avoid, &old_v6).await;
-                    match candidate {
-                        Some(cand) if networking::normalize_v6_64(&cand) != old_prefix => {
-                            if state.is_burnt(&cand) {
-                                crate::config::append_log(
-                                    &paths.guard_log_file(),
-                                    &format!(
-                                        "try {attempt}: Cloudflare returned a burnt /64 again"
-                                    ),
-                                    1_048_576,
-                                );
-                                continue;
-                            }
-                            new_v6 = cand;
-                            break;
-                        }
-                        Some(cand) => {
-                            crate::config::append_log(
-                                &paths.guard_log_file(),
-                                &format!("try {attempt}: WARP returned the same /64 ({cand})"),
-                                1_048_576,
-                            );
-                        }
-                        None => {
-                            crate::config::append_log(
-                                &paths.guard_log_file(),
-                                &format!("try {attempt}: rotation produced no fresh /64"),
-                                1_048_576,
-                            );
-                        }
-                    }
-                }
-                if new_v6.is_empty() {
-                    if let Some(candidate) = warp::hop_once(&bin, paths, 3, &[], &old_v6).await {
-                        new_v6 = candidate;
-                    }
-                }
-                drop(pause);
-            }
+/// Rotate the Tor circuit and resume waiting chats when it succeeds.
+async fn rotate_tor(paths: &Paths, state: &mut GuardState, now: i64) -> Result<bool> {
+    crate::config::append_log(
+        &paths.guard_log_file(),
+        "wall detected in Tor mode - rotating circuit",
+        1_048_576,
+    );
+    let msg = tor::rotate_circuit(paths).await?;
+    state.last_hop = now;
+    state.hops += 1;
+    if !msg.is_empty() {
+        state.last_ok_hop = now;
+    }
+    let _ = state.save(paths);
+    crate::config::append_log(
+        &paths.guard_log_file(),
+        &format!("Tor rotated: {msg}"),
+        1_048_576,
+    );
+    if !msg.is_empty() {
+        dispatch_auto_resume(paths, state, None).await?;
+        return Ok(true);
+    }
+    Ok(false)
+}
 
-            state.last_hop = now;
-            let same_address = !old_prefix.is_empty()
-                && !new_v6.is_empty()
-                && networking::normalize_v6_64(&new_v6) == old_prefix;
-            if !new_v6.is_empty() && !same_address {
-                state.current = new_v6.clone();
-                state.hops += 1;
-                state.last_ok_hop = now;
-                state.failed_hops = 0;
-                state.backoff_until = 0;
-                state.hop_counted = 0;
-                let _ = state.save(paths);
-                crate::config::append_log(
-                    &paths.guard_log_file(),
-                    &format!("rotated #{}: {old_v6} -> {new_v6}", state.hops),
-                    1_048_576,
-                );
-                let _ = crate::config::write_text(&paths.edge_reroll_file(), &now.to_string());
-                dispatch_auto_resume(paths, state, None).await?;
-                return Ok(true);
-            }
-            if same_address {
-                state.failed_hops += 1;
-                if state.failed_hops >= FAILED_HOPS_MAX {
-                    state.backoff_until = now + BACKOFF_SECONDS;
-                    state.backoff_logged = now;
+/// Cycle to the next custom proxy node and resume waiting chats on success.
+async fn rotate_custom(paths: &Paths, state: &mut GuardState, now: i64) -> Result<bool> {
+    crate::config::append_log(
+        &paths.guard_log_file(),
+        "wall detected in Custom Proxy mode - cycling node",
+        1_048_576,
+    );
+    let (ok, msg) = proxy::chain::rotate_custom_proxy(paths).await?;
+    state.last_hop = now;
+    state.hops += 1;
+    if ok {
+        state.last_ok_hop = now;
+    }
+    let _ = state.save(paths);
+    crate::config::append_log(
+        &paths.guard_log_file(),
+        &format!("custom rotated: {msg}"),
+        1_048_576,
+    );
+    if ok {
+        dispatch_auto_resume(paths, state, None).await?;
+    }
+    Ok(ok)
+}
+
+/// Rotate the WARP `/64`, blacklisting burnt prefixes, and resume on success.
+async fn rotate_warp(
+    paths: &Paths,
+    state: &mut GuardState,
+    now: i64,
+    cfg: &EgressConfig,
+) -> Result<bool> {
+    let Some(bin) = warp::find_warp_cli() else {
+        crate::config::append_log(
+            &paths.guard_log_file(),
+            "wall detected but warp-cli is not installed",
+            1_048_576,
+        );
+        return Ok(false);
+    };
+    let old_v6 = networking::get_egress_ip(cfg, 8)
+        .await
+        .or_else(networking::warp_local_v6)
+        .unwrap_or_else(|| state.current.clone());
+    let old_display = if old_v6.is_empty() {
+        "?".to_string()
+    } else {
+        old_v6.clone()
+    };
+    let old_prefix = networking::normalize_v6_64(&old_v6);
+    crate::config::append_log(
+        &paths.guard_log_file(),
+        &format!("wall detected - rotating WARP /64 (was: {old_display})"),
+        1_048_576,
+    );
+    state.blacklist_prefix(&old_v6);
+    let _ = state.save(paths);
+
+    let avoid = state.blacklist.clone();
+    let mut new_v6 = String::new();
+    {
+        let pause = crate::config::PauseGuard::acquire(paths, "zen-guard", 600);
+        for attempt in 1..=MAX_HOP_TRIES {
+            let candidate = warp::hop_once(&bin, paths, 3, &avoid, &old_v6).await;
+            match candidate {
+                Some(cand) if networking::normalize_v6_64(&cand) != old_prefix => {
+                    if state.is_burnt(&cand) {
+                        crate::config::append_log(
+                            &paths.guard_log_file(),
+                            &format!("try {attempt}: Cloudflare returned a burnt /64 again"),
+                            1_048_576,
+                        );
+                        continue;
+                    }
+                    new_v6 = cand;
+                    break;
+                }
+                Some(cand) => {
                     crate::config::append_log(
                         &paths.guard_log_file(),
-                        &format!(
-                            "pausing auto-rotation for {} min: WARP kept returning the same /64.",
-                            BACKOFF_SECONDS / 60
-                        ),
+                        &format!("try {attempt}: WARP returned the same /64 ({cand})"),
                         1_048_576,
                     );
                 }
-                let _ = state.save(paths);
-                return Ok(false);
+                None => {
+                    crate::config::append_log(
+                        &paths.guard_log_file(),
+                        &format!("try {attempt}: rotation produced no fresh /64"),
+                        1_048_576,
+                    );
+                }
             }
-            state.backoff_until = now + ROTATION_RETRY_SECONDS;
+        }
+        if new_v6.is_empty() {
+            if let Some(candidate) = warp::hop_once(&bin, paths, 3, &[], &old_v6).await {
+                new_v6 = candidate;
+            }
+        }
+        drop(pause);
+    }
+
+    state.last_hop = now;
+    let same_address = !old_prefix.is_empty()
+        && !new_v6.is_empty()
+        && networking::normalize_v6_64(&new_v6) == old_prefix;
+    if !new_v6.is_empty() && !same_address {
+        state.current = new_v6.clone();
+        state.hops += 1;
+        state.last_ok_hop = now;
+        state.failed_hops = 0;
+        state.backoff_until = 0;
+        state.hop_counted = 0;
+        let _ = state.save(paths);
+        crate::config::append_log(
+            &paths.guard_log_file(),
+            &format!("rotated #{}: {old_v6} -> {new_v6}", state.hops),
+            1_048_576,
+        );
+        let _ = crate::config::write_text(&paths.edge_reroll_file(), &now.to_string());
+        dispatch_auto_resume(paths, state, None).await?;
+        return Ok(true);
+    }
+    if same_address {
+        state.failed_hops += 1;
+        if state.failed_hops >= FAILED_HOPS_MAX {
+            state.backoff_until = now + BACKOFF_SECONDS;
             state.backoff_logged = now;
-            let _ = state.save(paths);
             crate::config::append_log(
                 &paths.guard_log_file(),
                 &format!(
-                    "rotation failed - no confirmed new IPv6 egress. Pausing retries for {} min.",
-                    ROTATION_RETRY_SECONDS / 60
+                    "pausing auto-rotation for {} min: WARP kept returning the same /64.",
+                    BACKOFF_SECONDS / 60
                 ),
                 1_048_576,
             );
-            Ok(false)
         }
+        let _ = state.save(paths);
+        return Ok(false);
     }
+    state.backoff_until = now + ROTATION_RETRY_SECONDS;
+    state.backoff_logged = now;
+    let _ = state.save(paths);
+    crate::config::append_log(
+        &paths.guard_log_file(),
+        &format!(
+            "rotation failed - no confirmed new IPv6 egress. Pausing retries for {} min.",
+            ROTATION_RETRY_SECONDS / 60
+        ),
+        1_048_576,
+    );
+    Ok(false)
 }
 
 async fn dispatch_auto_resume(
@@ -723,4 +760,91 @@ async fn dispatch_auto_resume(
     state.prune();
     let _ = state.save(paths);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn wall_line(session: &str) -> String {
+        format!(
+            "timestamp=2026-11-19T10:00:00.000Z level=ERROR cause=\"AI.Error.QuotaExceeded: \
+             Free usage limit reached\" role=server sessionID={session}"
+        )
+    }
+
+    #[test]
+    fn detects_a_fresh_wall_and_its_session() {
+        let paths = crate::config::Paths::for_test("fresh");
+        let log = paths.data_root.join("opencode.log");
+        std::fs::write(&log, format!("{}\n", wall_line("ses_abc123"))).unwrap();
+        let mut state = GuardState::default();
+
+        let (wall, sessions) = read_new_bytes(&mut state, &paths, &log);
+
+        assert!(wall);
+        assert_eq!(sessions, vec!["ses_abc123".to_string()]);
+        assert!(state.wall_pending);
+        assert_eq!(state.offset, std::fs::metadata(&log).unwrap().len());
+        let _ = std::fs::remove_dir_all(&paths.data_root);
+    }
+
+    #[test]
+    fn truncated_log_is_resynced_not_replayed() {
+        let paths = crate::config::Paths::for_test("truncated");
+        let log = paths.data_root.join("opencode.log");
+        std::fs::write(&log, format!("{}\n", wall_line("ses_old"))).unwrap();
+        let mut state = GuardState {
+            offset: 999_999,
+            ..Default::default()
+        };
+
+        let (wall, sessions) = read_new_bytes(&mut state, &paths, &log);
+
+        assert!(!wall, "history must not be replayed as a fresh wall");
+        assert!(sessions.is_empty());
+        assert_eq!(state.offset, std::fs::metadata(&log).unwrap().len());
+        let _ = std::fs::remove_dir_all(&paths.data_root);
+    }
+
+    #[test]
+    fn oversized_backlog_is_skipped_not_replayed() {
+        let paths = crate::config::Paths::for_test("backlog");
+        let log = paths.data_root.join("opencode.log");
+        let mut content = "x".repeat(MAX_READ_BYTES + 1024);
+        content.push('\n');
+        content.push_str(&wall_line("ses_late"));
+        std::fs::write(&log, content).unwrap();
+        let mut state = GuardState {
+            offset: 0,
+            ..Default::default()
+        };
+
+        let (wall, sessions) = read_new_bytes(&mut state, &paths, &log);
+
+        assert!(
+            !wall,
+            "a wall buried in a large backlog must not be replayed"
+        );
+        assert!(sessions.is_empty());
+        assert_eq!(state.offset, std::fs::metadata(&log).unwrap().len());
+        let _ = std::fs::remove_dir_all(&paths.data_root);
+    }
+
+    #[test]
+    fn unchanged_log_reports_nothing() {
+        let paths = crate::config::Paths::for_test("unchanged");
+        let log = paths.data_root.join("opencode.log");
+        std::fs::write(&log, "all good\n").unwrap();
+        let mut state = GuardState {
+            offset: std::fs::metadata(&log).unwrap().len(),
+            ..Default::default()
+        };
+
+        let (wall, sessions) = read_new_bytes(&mut state, &paths, &log);
+
+        assert!(!wall);
+        assert!(sessions.is_empty());
+        let _ = std::fs::remove_dir_all(&paths.data_root);
+    }
 }

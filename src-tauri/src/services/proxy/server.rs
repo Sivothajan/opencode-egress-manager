@@ -40,13 +40,16 @@ const PROBE_PINNED_HOSTS: &[&str] = &[
     "inference.opencode.ai",
 ];
 
+/// Handle for a running local proxy listener.
 pub struct RunningProxy {
+    /// Actual bound port (useful when started with port 0).
     pub port: u16,
     cancel: CancellationToken,
     join: tokio::task::JoinHandle<()>,
 }
 
 impl RunningProxy {
+    /// Cancel the accept loop and wait briefly for it to finish.
     pub async fn stop(self) {
         self.cancel.cancel();
         let _ = tokio::time::timeout(Duration::from_secs(3), self.join).await;
@@ -189,6 +192,7 @@ pub async fn start_proxy_server(paths: &Paths, port: u16) -> Result<RunningProxy
     })
 }
 
+/// Load the persisted proxy status and whether the fallback flag is set.
 pub fn proxy_status_snapshot(paths: &Paths) -> (ProxyStatus, bool) {
     let status = ProxyStatus::load(paths);
     let fallback = paths.fallback_flag().is_file();

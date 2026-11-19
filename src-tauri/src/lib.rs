@@ -3,6 +3,8 @@
 //! The GUI binary (`main.rs`), background worker binary and privileged admin helper
 //! all build on this library so business logic lives in exactly one place.
 
+#![deny(missing_docs)]
+
 pub mod app;
 pub mod commands;
 pub mod config;

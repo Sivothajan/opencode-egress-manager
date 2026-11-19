@@ -104,6 +104,7 @@ async fn rule_exists(name: &str) -> bool {
     }
 }
 
+/// True when this application's kill-switch firewall rule is present.
 pub async fn is_installed() -> bool {
     rule_exists(FIREWALL_RULE_NAME).await
 }
@@ -113,6 +114,7 @@ pub async fn is_python_installed() -> bool {
     rule_exists("OUC_LEAKGUARD_CLI").await
 }
 
+/// Create the kill-switch firewall rule for the OpenCode CLI executable.
 pub async fn install(cli_path: &str) -> Result<String> {
     if !platform::is_admin() {
         return Err(AppError::Validation(
@@ -150,6 +152,7 @@ pub async fn install(cli_path: &str) -> Result<String> {
     Err(AppError::Process(out.trim().to_string()))
 }
 
+/// Remove the kill-switch firewall rule.
 pub async fn remove() -> Result<String> {
     if !platform::is_admin() {
         return Err(AppError::Validation(

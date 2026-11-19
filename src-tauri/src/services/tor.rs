@@ -10,20 +10,23 @@ use sha2::{Digest, Sha256};
 use tokio::time::sleep;
 
 use crate::{
-    config::{Paths, TOR_BROWSER_SOCKS_PORT, TOR_CONTROL_PORT, TOR_SOCKS_PORT},
+    config::{Paths, TOR_BROWSER_SOCKS_PORT, TOR_CONTROL_PORT, TOR_SOCKS_PORT, USER_AGENT},
     errors::{redact, AppError, Result},
     services::{networking, proxy::socks},
 };
 
 const DETACHED_PROCESS: u32 = 0x0000_0008;
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-const USER_AGENT: &str = "opencode-egress-manager/3.0";
 
+/// Current Tor availability and the process this app owns.
 #[derive(Debug, Clone, Serialize)]
 pub struct TorStatus {
+    /// Whether a live Tor SOCKS service answered.
     pub active: bool,
+    /// `host:port` of the live SOCKS service, when found.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub target: Option<(String, u16)>,
+    /// Whether the PID recorded for portable Tor is still alive.
     pub portable_running: bool,
 }
 
@@ -43,6 +46,7 @@ fn log_file(paths: &Paths) -> PathBuf {
     paths.logs_dir.join("tor.log")
 }
 
+/// Locate `tor.exe` in the portable directory, Tor Browser, or `PATH`.
 pub fn find_tor_exe(paths: &Paths) -> Option<PathBuf> {
     let candidates = [
         tor_dir(paths).join("tor").join("tor.exe"),
@@ -91,6 +95,7 @@ pub async fn active_target() -> Option<(String, u16)> {
     None
 }
 
+/// Probe Tor availability and report the combined status snapshot.
 pub async fn status_for(paths: &Paths) -> TorStatus {
     let target = active_target().await;
     let portable_running = portable_running(paths);
@@ -107,6 +112,7 @@ pub fn portable_pid(paths: &Paths) -> Option<u32> {
     text.trim().parse::<u32>().ok()
 }
 
+/// Check whether the PID recorded for our portable Tor is still alive.
 pub fn portable_running(paths: &Paths) -> bool {
     let Some(pid) = portable_pid(paths) else {
         return false;
@@ -184,6 +190,7 @@ pub async fn start_portable_tor(paths: &Paths) -> Result<String> {
     )))
 }
 
+/// Terminate the portable Tor process this app started.
 pub async fn stop_portable_tor(paths: &Paths) -> Result<String> {
     let Some(pid) = portable_pid(paths) else {
         return Ok("Portable Tor is not running.".into());

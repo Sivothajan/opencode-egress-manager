@@ -14,14 +14,21 @@ use crate::{
     events, platform,
 };
 
+/// Title of the main application window, used by the single-instance guard.
 pub const WINDOW_TITLE: &str = "Opencode Egress Manager";
 
+/// One proxy reachability probe, as displayed in the UI.
 #[derive(Debug, Clone, Serialize)]
 pub struct ProbeState {
+    /// Whether the probe reached opencode.ai; `None` until the first result.
     pub ok: Option<bool>,
+    /// Short outcome label (`ok`, `proxy_down`, `upstream`, `timeout`, ...).
     pub code: String,
+    /// Probe round-trip time in milliseconds.
     pub ms: i64,
+    /// UTC unix timestamp when the probe completed.
     pub ts: i64,
+    /// True while a probe is in flight.
     #[serde(default)]
     pub checking: bool,
 }
@@ -38,31 +45,50 @@ impl Default for ProbeState {
     }
 }
 
+/// A single automatic-repair attempt recorded for the UI log.
 #[derive(Debug, Clone, Serialize)]
 pub struct RepairActionEntry {
+    /// UTC unix timestamp when the repair ran.
     pub ts: i64,
+    /// Identifier of the repair action that was attempted.
     pub action: String,
+    /// Why the repair action was selected.
     pub reason: String,
+    /// Whether the repair reported success.
     pub ok: bool,
+    /// Outcome message returned by the repair action.
     pub message: String,
 }
 
+/// Shared runtime state cached between commands and the background loops.
 #[derive(Debug, Clone)]
 pub struct UiState {
+    /// Last known public egress IP, if a refresh succeeded.
     pub egress: Option<String>,
+    /// UTC unix timestamp of the last egress refresh.
     pub egress_ts: i64,
+    /// True while an egress refresh is in progress.
     pub egress_checking: bool,
+    /// Most recent proxy reachability probe.
     pub probe: ProbeState,
+    /// UTC unix timestamp of the last probe.
     pub probe_ts: i64,
+    /// Candidate OpenCode AAAA edge addresses.
     pub edge_pool: Vec<String>,
+    /// Whether automatic repair is enabled.
     pub repair_enabled: bool,
+    /// Human-readable status line for the repair panel.
     pub repair_status: String,
+    /// Chronological log of repair attempts, newest last.
     pub repair_actions: Vec<RepairActionEntry>,
+    /// UTC unix timestamp of the last attempt for each action key.
     pub repair_last: HashMap<String, f64>,
+    /// Serializes repair actions against concurrent UI commands.
     pub action_lock: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl UiState {
+    /// Create UI state, seeding repair options from the loaded settings.
     pub fn new(settings: &AppSettings) -> Self {
         Self {
             egress: None,
@@ -79,6 +105,7 @@ impl UiState {
         }
     }
 
+    /// Build the newest-first repair summary sent to the frontend.
     pub fn repair_snapshot(&self) -> RepairSnapshot {
         RepairSnapshot {
             enabled: self.repair_enabled,
@@ -89,21 +116,30 @@ impl UiState {
     }
 }
 
+/// Repair summary payload serialized to the frontend.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RepairSnapshot {
+    /// Whether automatic repair is enabled.
     pub enabled: bool,
+    /// Human-readable status line for the repair panel.
     pub status: String,
+    /// Most recent repair entries, newest first (capped at six).
     pub actions: Vec<RepairActionEntry>,
+    /// Upper bound on automatic repairs per hour.
     pub max_per_hour: u32,
 }
 
+/// Tauri-managed application state shared by commands and background loops.
 pub struct AppState {
+    /// Resolved filesystem locations for configuration, data, and logs.
     pub paths: Paths,
+    /// Mutex-guarded UI state.
     pub ui: tokio::sync::Mutex<UiState>,
 }
 
 impl AppState {
+    /// Create application state from resolved paths and loaded settings.
     pub fn new(paths: Paths, settings: &AppSettings) -> Self {
         Self {
             paths,
@@ -121,6 +157,8 @@ fn init_tracing(_paths: &Paths) {
         .try_init();
 }
 
+/// Assemble and run the Tauri application: single-instance guard, command
+/// handlers, and the background probe/repair loops.
 pub fn run() {
     let paths = Paths::discover();
     if let Err(err) = paths.ensure_dirs() {
@@ -289,7 +327,7 @@ async fn probe_once(proxy: &str) -> Option<bool> {
     let mut builder = reqwest::Client::builder()
         .no_proxy()
         .timeout(Duration::from_secs(8))
-        .user_agent("opencode-egress-manager-probe/3.0");
+        .user_agent(crate::config::PROBE_USER_AGENT);
     if !proxy.is_empty() {
         if let Ok(p) = reqwest::Proxy::all(proxy) {
             builder = builder.proxy(p);
@@ -324,15 +362,25 @@ async fn background_repair_loop(app: AppHandle, paths: Paths) {
     }
 }
 
+/// Connectivity facts sampled to decide whether an automatic repair is needed.
 pub struct RepairSnapshotData {
+    /// Whether WARP reports an active connection.
     pub warp_connected: bool,
+    /// Whether an edge rotation is already in progress.
     pub rotating: bool,
+    /// Current egress mode name (for example `warp` or `clean`).
     pub mode: String,
+    /// Whether the local service proxy accepts connections.
     pub proxy_listening: bool,
+    /// Whether a keeper worker process is running.
     pub keeper_running: bool,
+    /// Age in seconds of the keeper heartbeat, if known.
     pub keeper_heartbeat: Option<f64>,
+    /// Whether the keeper logon task is enabled.
     pub keeper_task_enabled: bool,
+    /// Whether the proxy is currently using its direct fallback.
     pub fallback_active: bool,
+    /// Last probe outcome code.
     pub probe_code: String,
 }
 

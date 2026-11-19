@@ -6,26 +6,36 @@ use thiserror::Error;
 /// return this type so callers can surface honest messages.
 pub type Result<T> = std::result::Result<T, AppError>;
 
+/// Typed application error.
+///
+/// Services return this so callers can surface honest, redactable messages.
 #[derive(Debug, Error)]
 pub enum AppError {
+    /// Filesystem or OS I/O failure.
     #[error("{0}")]
     Io(String),
 
+    /// JSON serialization or deserialization failure.
     #[error("{0}")]
     Json(String),
 
+    /// Input failed validation.
     #[error("{0}")]
     Validation(String),
 
+    /// The requested resource does not exist.
     #[error("{0}")]
     NotFound(String),
 
+    /// A child process could not be started or failed to run.
     #[error("{0}")]
     Process(String),
 
+    /// The operation was cancelled before completion.
     #[error("operation cancelled")]
     Cancelled,
 
+    /// Any other application error.
     #[error("{0}")]
     Other(String),
 }
@@ -62,14 +72,17 @@ impl AppError {
         redact(&self.to_string())
     }
 
+    /// Build a validation error from a user-facing message.
     pub fn validation(message: impl Into<String>) -> Self {
         AppError::Validation(message.into())
     }
 
+    /// Build a not-found error from a user-facing message.
     pub fn not_found(message: impl Into<String>) -> Self {
         AppError::NotFound(message.into())
     }
 
+    /// Build a catch-all error from a user-facing message.
     pub fn other(message: impl Into<String>) -> Self {
         AppError::Other(message.into())
     }

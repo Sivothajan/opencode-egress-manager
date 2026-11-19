@@ -205,12 +205,16 @@ pub async fn run_hidden_oc(cli: &Path, args: &[&str], timeout_secs: u64) -> Resu
 // service.json wiring
 // ---------------------------------------------------------------------------
 
+/// Result of inspecting OpenCode's `service.json` proxy wiring.
 #[derive(Debug, Clone)]
 pub struct ServiceConfigStatus {
+    /// True when `HTTPS_PROXY` points at the requested local port.
     pub wired: bool,
+    /// Path of the inspected `service.json`.
     pub path: PathBuf,
 }
 
+/// Check whether OpenCode's service config routes through `proxy_port`.
 pub fn service_config_status(proxy_port: u16) -> ServiceConfigStatus {
     let path = Paths::opencode_service_config();
     let wired = read_service_config(&path)
@@ -355,10 +359,14 @@ pub fn restore_service_backup() -> Result<()> {
 // Database maintenance
 // ---------------------------------------------------------------------------
 
+/// Row counts shown on the OpenCode tab.
 #[derive(Debug, Clone, Serialize)]
 pub struct DbStats {
+    /// Stored project directories.
     pub projects: i64,
+    /// Stored (non-archived) sessions.
     pub sessions: i64,
+    /// Stored chat messages.
     pub messages: i64,
 }
 
@@ -375,6 +383,9 @@ fn purge_lockouts(conn: &rusqlite::Connection) -> rusqlite::Result<usize> {
     conn.execute(LOCKOUT_SQL, [])
 }
 
+/// Remove client-side lockout rows, returning how many were deleted.
+///
+/// A return value of `0` means there was nothing to clear or the database was busy.
 pub fn clear_free_limit() -> i64 {
     let db_path = Paths::opencode_drafts_db();
     if !db_path.is_file() {
@@ -400,6 +411,7 @@ pub fn clear_free_limit() -> i64 {
     }
 }
 
+/// Read project/session/message counts from the OpenCode database.
 pub fn db_stats() -> DbStats {
     let db_path = Paths::opencode_db();
     let mut out = DbStats {
@@ -432,10 +444,14 @@ pub fn db_stats() -> DbStats {
     out
 }
 
+/// Minimal session identity used to target an auto-resume.
 #[derive(Debug, Clone)]
 pub struct SessionInfo {
+    /// OpenCode session ID (`ses_...`).
     pub id: String,
+    /// Working directory captured with the session.
     pub directory: String,
+    /// User-visible session title.
     pub title: String,
 }
 
@@ -460,6 +476,7 @@ fn latest_session_in(conn: &rusqlite::Connection) -> Option<SessionInfo> {
     })
 }
 
+/// Most recently updated non-archived session, if the database exists.
 pub fn latest_session() -> Option<SessionInfo> {
     let db_path = Paths::opencode_db();
     if !db_path.is_file() {
@@ -481,6 +498,9 @@ fn session_directory_in(conn: &rusqlite::Connection, session_id: &str) -> Option
     .flatten()
 }
 
+/// Look up the working directory recorded for a session ID.
+///
+/// IDs are validated before touching SQLite so hostile input cannot reach a query.
 pub fn session_directory(session_id: &str) -> Option<String> {
     if session_id.len() > 128
         || !session_id
@@ -497,15 +517,22 @@ pub fn session_directory(session_id: &str) -> Option<String> {
     session_directory_in(&conn, session_id)
 }
 
-fn opencode_command(cli: &Path, args: &[String]) -> Vec<String> {
-    let text = cli.to_string_lossy().to_ascii_lowercase();
+/// Build the spawnable command for the OpenCode CLI.
+///
+/// Returns `(program, args)` where `program` is always the executable to start.
+/// `.cmd`/`.bat` shims cannot be launched directly by `CreateProcess`, so they are
+/// wrapped in `cmd.exe /c`. Dropping the CLI path here made the caller spawn the
+/// literal argument `run` and fail with "program not found".
+fn opencode_command(cli: &Path, args: &[String]) -> (String, Vec<String>) {
+    let cli_text = cli.to_string_lossy().to_string();
+    let text = cli_text.to_ascii_lowercase();
     if text.ends_with(".cmd") || text.ends_with(".bat") {
         let comspec = std::env::var("COMSPEC").unwrap_or_else(|_| "cmd.exe".into());
-        let mut out = vec![comspec, "/c".to_string()];
-        out.extend(args.iter().cloned());
-        out
+        let mut rest = vec!["/c".to_string(), cli_text];
+        rest.extend(args.iter().cloned());
+        (comspec, rest)
     } else {
-        args.to_vec()
+        (cli_text, args.to_vec())
     }
 }
 
@@ -576,10 +603,8 @@ pub async fn resume_sessions(session_ids: &[String]) -> Result<(u32, Vec<String>
             sid.clone(),
             "continue".to_string(),
         ];
-        let program = cli.to_string_lossy().to_string();
-        let full = opencode_command(&cli, &base);
-        let argv = full_split(&full, &program);
-        match spawn_detached(&argv.0, &argv.1, cwd) {
+        let (program, argv) = opencode_command(&cli, &base);
+        match spawn_detached(&program, &argv, cwd) {
             Ok(()) => sent += 1,
             Err(err) => notes.push(format!(
                 "{}: {}",
@@ -589,22 +614,6 @@ pub async fn resume_sessions(session_ids: &[String]) -> Result<(u32, Vec<String>
         }
     }
     Ok((sent, notes))
-}
-
-/// Split an argument vector into (program, arguments) preserving cmd.exe wrappers.
-fn full_split(full: &[String], fallback_program: &str) -> (String, Vec<String>) {
-    if full.is_empty() {
-        return (fallback_program.to_string(), Vec::new());
-    }
-    let program = full[0].clone();
-    let rest = full[1..].to_vec();
-    if program.eq_ignore_ascii_case("cmd.exe") || program.eq_ignore_ascii_case("cmd") {
-        // cmd.exe /c <exe> <args...>
-        if rest.len() >= 2 && rest[0].eq_ignore_ascii_case("/c") {
-            return (rest[1].clone(), rest[2..].to_vec());
-        }
-    }
-    (program, rest)
 }
 
 fn dispatch_cli_resume(cli: &Path, session: Option<SessionInfo>) -> Result<()> {
@@ -631,10 +640,8 @@ fn dispatch_cli_resume(cli: &Path, session: Option<SessionInfo>) -> Result<()> {
             }
         })
         .filter(|p| p.is_dir());
-    let program = cli.to_string_lossy().to_string();
-    let full = opencode_command(cli, &args);
-    let argv = full_split(&full, &program);
-    spawn_detached(&argv.0, &argv.1, cwd.as_deref())
+    let (program, argv) = opencode_command(cli, &args);
+    spawn_detached(&program, &argv, cwd.as_deref())
 }
 
 // ---------------------------------------------------------------------------
@@ -782,9 +789,7 @@ pub async fn resume_active_session(
     paths: &Paths,
     session_ids: Option<Vec<String>>,
 ) -> Result<String> {
-    let enabled = std::fs::read_to_string(paths.auto_resume_flag())
-        .map(|v| v.trim() != "0")
-        .unwrap_or(true);
+    let enabled = crate::config::auto_resume_enabled(paths);
     if !enabled {
         return Ok("Auto-resume is disabled.".into());
     }
@@ -912,20 +917,31 @@ mod tests {
     }
 
     #[test]
-    fn splits_cmd_wrappers() {
-        let full = vec![
-            "cmd.exe".into(),
-            "/c".into(),
-            "opencode.cmd".into(),
-            "run".into(),
-        ];
-        let argv = full_split(&full, "fallback");
-        assert_eq!(argv.0, "opencode.cmd");
-        assert_eq!(argv.1, vec!["run".to_string()]);
-        let direct = vec!["opencode.exe".into(), "--version".into()];
-        let argv = full_split(&direct, "fallback");
-        assert_eq!(argv.0, "opencode.exe");
-        assert_eq!(argv.1, vec!["--version".to_string()]);
+    fn builds_a_spawnable_cli_command() {
+        // A plain executable: program must be the CLI path, not its first argument.
+        let cli = Path::new("C:/tools/opencode.exe");
+        let (program, argv) = opencode_command(cli, &["run".into(), "continue".into()]);
+        assert_eq!(program, "C:/tools/opencode.exe");
+        assert_eq!(argv, vec!["run".to_string(), "continue".to_string()]);
+
+        // A .cmd shim must be wrapped in cmd.exe /c with the shim still present.
+        let cli = Path::new("C:/tools/opencode.cmd");
+        let (program, argv) =
+            opencode_command(cli, &["run".into(), "--session".into(), "ses_1".into()]);
+        assert_eq!(
+            program,
+            std::env::var("COMSPEC").unwrap_or_else(|_| "cmd.exe".into())
+        );
+        assert_eq!(
+            argv,
+            vec![
+                "/c".to_string(),
+                "C:/tools/opencode.cmd".to_string(),
+                "run".to_string(),
+                "--session".to_string(),
+                "ses_1".to_string()
+            ]
+        );
     }
 
     #[test]
