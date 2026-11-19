@@ -1,6 +1,6 @@
 [package]
 name = "opencode-egress-manager"
-version = "0.3.0"
+version = "0.3.1"
 description = "Windows-first egress manager for OpenCode"
 authors = ["Opencode Egress Manager contributors"]
 edition = "2021"
