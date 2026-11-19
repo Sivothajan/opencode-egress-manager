@@ -8,12 +8,47 @@
       "skillPath": "skills/find-skills/SKILL.md",
       "computedHash": "7bc223e2aafbdbf6e50ea243ba6ef67fe432bb069ab439fea0390795dac0bf7f"
     },
+    "rust-async-patterns": {
+      "source": "wshobson/agents",
+      "commit": "42203085cfc5736204bf0f6d436dff7e1da0bf3f",
+      "sourceType": "github",
+      "skillPath": "plugins/systems-programming/skills/rust-async-patterns/SKILL.md",
+      "computedHash": "286b73077a434af5844dd480e5b98026bea5b31fcfafce3c04405a7392331601"
+    },
+    "rust-best-practices": {
+      "source": "apollographql/skills",
+      "commit": "9dda1397730370aeb8df4ff8f2015c34c86b5003",
+      "sourceType": "github",
+      "skillPath": "skills/rust-best-practices/SKILL.md",
+      "computedHash": "7e12e68aa50152eb7ba9ea1f88ca5380c846ea0175f8ab6788bb79b7faf12ca0"
+    },
+    "rust-engineer": {
+      "source": "Jeffallan/claude-skills",
+      "commit": "67c1961b180dc92cf08983346427109e983e8f51",
+      "sourceType": "github",
+      "skillPath": "skills/rust-engineer/SKILL.md",
+      "computedHash": "41b14a9b58417e000511e6fb3e7eb3727c9a051627788a0ad67963c7244ba248"
+    },
+    "rust-skills": {
+      "source": "leonardomso/rust-skills",
+      "commit": "fd2a861ab0406a4ac536a55274d14ea6fd1ca9c9",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "eed1858cbf96b3fe03b1fc4efcca1819e01fc46c0676574840a3eebe45bc6864"
+    },
+    "rust-testing": {
+      "source": "affaan-m/ECC",
+      "commit": "3f14a103a8694e51c1df9a806217a6d0b5f7a6f7",
+      "sourceType": "github",
+      "skillPath": "skills/rust-testing/SKILL.md",
+      "computedHash": "4a16853504a8d9ee1af3abb29e4db9b506ddc46f5ef6bafff45193a1a1a1e520"
+    },
     "shadcn": {
       "source": "shadcn-ui/ui",
       "commit": "968d8cb9dc42ae5d52e8fd356cf84596ec832a26",
       "sourceType": "github",
       "skillPath": "skills/shadcn/SKILL.md",
-      "computedHash": "388962d16c7a4f13aaeee0d8f128e50a87df8553d42ef7988c39c0e1c74a40e8"
+      "computedHash": "388962d16c7a4f13aaeee1d8f128e50a87df8553d42ef7988c39c0e1c74a40e8"
     },
     "tauri-v2": {
       "source": "nodnarbnitram/claude-code-extensions",
