@@ -11,9 +11,8 @@ fn main() -> ExitCode {
             .enable_all()
             .build()
             .expect("failed to start async runtime");
-        return ExitCode::from(
-            runtime.block_on(egress_manager::services::worker::run_role(&role)) as u8,
-        );
+        let code = runtime.block_on(egress_manager::services::worker::run_role(&role));
+        return ExitCode::from(u8::try_from(code).unwrap_or(255));
     }
 
     if args.first().map(|a| a.as_str()) == Some("--lane") {
@@ -28,10 +27,11 @@ fn main() -> ExitCode {
             .enable_all()
             .build()
             .expect("failed to start async runtime");
-        return ExitCode::from(runtime.block_on(egress_manager::services::lane::run_lane(
+        let code = runtime.block_on(egress_manager::services::lane::run_lane(
             desktop,
             launch_args,
-        )) as u8);
+        ));
+        return ExitCode::from(u8::try_from(code).unwrap_or(255));
     }
 
     egress_manager::app::run();

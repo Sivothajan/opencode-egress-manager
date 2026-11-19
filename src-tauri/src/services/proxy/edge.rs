@@ -42,7 +42,9 @@ impl EdgeState {
                 bad_edges: HashMap::new(),
                 stream_fails: HashMap::new(),
                 last_prefix: String::new(),
-                fetched_at: Instant::now() - CACHE_TTL - Duration::from_secs(1),
+                fetched_at: Instant::now()
+                    .checked_sub(CACHE_TTL + Duration::from_secs(1))
+                    .unwrap_or_else(Instant::now),
                 cached_v6: None,
             }),
         }
@@ -217,7 +219,9 @@ impl EdgeState {
     /// Force the next [`EdgeState::get`] to refresh the cached IPv6 and pool.
     pub async fn invalidate(&self) {
         let mut inner = self.inner.lock().await;
-        inner.fetched_at = Instant::now() - CACHE_TTL - Duration::from_secs(1);
+        inner.fetched_at = Instant::now()
+            .checked_sub(CACHE_TTL + Duration::from_secs(1))
+            .unwrap_or_else(Instant::now);
         inner.cached_v6 = None;
     }
 

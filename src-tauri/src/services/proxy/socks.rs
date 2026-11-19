@@ -13,6 +13,15 @@ use tokio::{
 
 use crate::errors::{AppError, Result};
 
+/// Validate a domain target for the SOCKS5 domain address type.
+fn socks_domain(host: &str) -> Result<Vec<u8>> {
+    let host = ascii_host(host)?;
+    if host.len() > 255 {
+        return Err(AppError::Process("SOCKS5 domain name is too long".into()));
+    }
+    Ok(host)
+}
+
 async fn read_exact(sock: &mut TcpStream, size: usize) -> Result<Vec<u8>> {
     let mut buf = vec![0u8; size];
     sock.read_exact(&mut buf).await?;
@@ -86,7 +95,7 @@ pub async fn open_socks5_tunnel(
                 req.extend_from_slice(&ip.octets());
             }
             Target::Domain => {
-                let host = ascii_host(dest_host)?;
+                let host = socks_domain(dest_host)?;
                 req.push(0x03);
                 req.push(host.len() as u8);
                 req.extend_from_slice(&host);
@@ -195,5 +204,12 @@ mod tests {
         assert!(ascii_host(&"a".repeat(300)).is_err());
         assert!(ascii_host("münchen.de").is_err());
         assert!(ascii_host("example.com").is_ok());
+    }
+
+    #[test]
+    fn domain_length_fits_socks5_length_byte() {
+        // `ascii_host` caps domains at 253 bytes; the SOCKS5 length byte holds 255.
+        assert!(socks_domain(&"a".repeat(253)).is_ok());
+        assert!(socks_domain(&"a".repeat(254)).is_err());
     }
 }

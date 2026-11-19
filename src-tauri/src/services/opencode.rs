@@ -706,12 +706,12 @@ extern "system" fn resume_enum_cb(hwnd: HWND, lparam: LPARAM) -> BOOL {
             return true.into();
         }
         let len = GetWindowTextLengthW(hwnd);
-        if len == 0 {
+        if len <= 0 {
             return true.into();
         }
         let mut buf = vec![0u16; (len as usize) + 1];
         let read = GetWindowTextW(hwnd, &mut buf);
-        if read == 0 {
+        if read <= 0 {
             return true.into();
         }
         let title = String::from_utf16_lossy(&buf[..read as usize]).to_ascii_lowercase();
