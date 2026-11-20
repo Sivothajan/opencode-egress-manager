@@ -7,7 +7,7 @@ use std::{
 };
 
 use serde::Serialize;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::{
     config::{AppSettings, Paths},
@@ -245,16 +245,31 @@ pub fn run() {
         .build(context)
         .expect("failed to build the Tauri application");
 
+    // WebView2 does not always move keyboard focus into its child when the OS activates
+    // the top-level window (Alt+Tab / taskbar). Debounce so a focus hand-off cannot loop.
+    let mut last_focus_restore: Option<Instant> = None;
     app.run(move |app_handle, event| {
         if let tauri::RunEvent::WindowEvent { label, event, .. } = &event {
             if label == "main" {
                 if matches!(event, tauri::WindowEvent::ThemeChanged(_)) {
                     apply_theme(app_handle, false);
                 }
-                if matches!(
-                    event,
-                    tauri::WindowEvent::Focused(true) | tauri::WindowEvent::Resized(_)
-                ) {
+                if matches!(event, tauri::WindowEvent::Focused(true)) {
+                    apply_theme(app_handle, false);
+                    let due = last_focus_restore
+                        .map(|at| at.elapsed() >= Duration::from_millis(500))
+                        .unwrap_or(true);
+                    if due {
+                        last_focus_restore = Some(Instant::now());
+                        if let Some(window) = app_handle.get_webview_window(label) {
+                            // Hand keyboard input to the webview child, then tell the
+                            // frontend to restore the previously focused DOM node.
+                            let _ = window.set_focus();
+                            let _ = window.emit("window-focus-restore", ());
+                        }
+                    }
+                }
+                if matches!(event, tauri::WindowEvent::Resized(_)) {
                     apply_theme(app_handle, true);
                 }
             }

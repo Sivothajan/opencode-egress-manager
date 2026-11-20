@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { Suspense, useEffect, useState } from "react";
 import { useTheme } from "next-themes";
+import { focusActiveNavOnRouteChange } from "@/lib/tauri";
 import {
   Activity,
   ArrowLeftRight,
@@ -105,6 +106,12 @@ export default function AppShell() {
   const active = NAV.find((item) =>
     item.end ? location.pathname === item.to : location.pathname.startsWith(item.to),
   );
+
+  // WebView2 can drop DOM focus during client-side navigation; return it to the
+  // active nav link so keyboard users are not left on <body>.
+  useEffect(() => {
+    focusActiveNavOnRouteChange();
+  }, [location.pathname]);
 
   return (
     <div className="flex h-dvh min-h-0 overflow-hidden bg-background">

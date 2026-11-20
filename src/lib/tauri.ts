@@ -14,6 +14,24 @@ function backendAvailable(): boolean {
   return Boolean(w.__TAURI_INTERNALS__ || w.__TAURI__);
 }
 
+/// True when running inside the native Tauri webview (not a plain browser).
+export function isTauriEnvironment(): boolean {
+  return backendAvailable();
+}
+
+/**
+ * After an SPA route change, WebView2 can leave DOM focus on <body>. Return focus
+ * to the active navigation link so keyboard navigation continues from a sensible
+ * place. No-op in browsers and whenever a control already has focus.
+ */
+export function focusActiveNavOnRouteChange(): void {
+  if (!isTauriEnvironment()) return;
+  if (typeof document === "undefined") return;
+  if (document.activeElement !== document.body) return;
+  const active = document.querySelector<HTMLElement>("nav a.active");
+  active?.focus({ preventScroll: true });
+}
+
 /**
  * Invoke a typed Tauri command. Tests mock this module, so components never
  * import `@tauri-apps/api/core` directly.

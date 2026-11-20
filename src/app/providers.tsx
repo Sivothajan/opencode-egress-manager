@@ -4,6 +4,7 @@ import { ThemeProvider } from "next-themes";
 import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useBackendEvents, useSystemAccent } from "@/hooks/useAppState";
+import { useWindowFocusRestore } from "@/hooks/useWindowFocusRestore";
 import AppShell from "./AppShell";
 
 // Split each feature into its own chunk so the initial bundle only carries the
@@ -26,6 +27,7 @@ const queryClient = new QueryClient({
 function EventBridge() {
   useBackendEvents();
   useSystemAccent();
+  useWindowFocusRestore();
   return null;
 }
 
